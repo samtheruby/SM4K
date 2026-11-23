@@ -34,7 +34,7 @@ class SiloAccount:
         self.homeUsers = []
         self.switchUser = False
         self.isOffline = False
-        self.isAuthenticated = self.isSignedIn
+        self.isAuthenticated = False  # lib/silo.py chooseProfile() decides once the profiles are known
 
     @property
     def ID(self):

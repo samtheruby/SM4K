@@ -33,6 +33,32 @@ def approved(access='A1'):
     )
 
 
+def fullLogin():
+    """A code sign-in approved for the whole account: Silo's poll answer then binds no profile ("profile_id: empty
+    for a full login", /api/v2/openapi.json)."""
+    return auth.PollResult(
+        {
+            'status': 'approved',
+            'profile_id': '',
+            'profile_token': '',
+            'tokens': {'access_token': 'A1', 'refresh_token': 'R1', 'user': {'role': 'admin'}},
+        }
+    )
+
+
+def profiles(*items):
+    """/api/v2/profiles answering these (id, has_pin) profiles."""
+    return FakeResponse(200, {'items': [{'id': pid, 'name': pid, 'has_pin': pin} for pid, pin in items]})
+
+
+def asksForProfile(account):
+    """lib/main.py _main()'s test for showing the profile picker before Home."""
+    return not account.isOffline and not account.isAuthenticated and (len(account.homeUsers) > 1 or account.isProtected)
+
+
+STORED_SESSION = {'server_id': 'srv-1', 'access_token': 'A1', 'refresh_token': 'R1', 'profile_id': 'p1'}
+
+
 def probeAnswers():
     return [
         FakeResponse(200, json.loads(fixture('silonet', 'system_info.json'))),
@@ -121,3 +147,62 @@ class SiloStartupTest(KodiTestCase):
             self.assertFalse(silo.init(session=FakeSession(requests.ConnectionError('down'))))
 
         self.assertIn('Silo server', dialog.call_args[0][1])
+
+    def signInWith(self, result, *answers):
+        ENV.settings[silo.SERVERS_SETTING] = json.dumps([STORED])
+        with mock.patch.object(silo, 'signIn', return_value=result):
+            self.assertTrue(silo.init(session=FakeSession(*answers)))
+        return plexapp.ACCOUNT
+
+    def startWith(self, stored, *answers):
+        ENV.settings[silo.SERVERS_SETTING] = json.dumps([STORED])
+        ENV.settings[silo.CREDENTIALS_SETTING] = json.dumps(stored)
+        with mock.patch.object(silo, 'signIn') as signIn:
+            self.assertTrue(silo.init(session=FakeSession(*answers)))
+        signIn.assert_not_called()
+        return plexapp.ACCOUNT
+
+    def test_code_sign_in_with_several_profiles_asks_which(self):
+        acct = self.signInWith(fullLogin(), profiles(('p1', False), ('p2', False)))
+
+        self.assertIsNone(acct.ID)
+        self.assertTrue(asksForProfile(acct))
+
+    def test_code_sign_in_with_one_profile_without_a_pin_goes_home_as_it(self):
+        acct = self.signInWith(fullLogin(), profiles(('p1', False)))
+
+        self.assertEqual(acct.ID, 'p1')
+        self.assertFalse(asksForProfile(acct))
+        self.assertEqual(json.loads(ENV.settings[silo.CREDENTIALS_SETTING])['profile_id'], 'p1')
+
+    def test_code_sign_in_with_one_protected_profile_asks_for_its_pin(self):
+        acct = self.signInWith(fullLogin(), profiles(('p1', True)))
+
+        self.assertEqual(acct.ID, 'p1')
+        self.assertTrue(asksForProfile(acct))
+
+    def test_code_sign_in_bound_to_a_profile_goes_home_as_it(self):
+        acct = self.signInWith(approved(), profiles(('p1', False), ('p2', False)))
+
+        self.assertEqual(acct.ID, 'p1')
+        self.assertFalse(asksForProfile(acct))
+
+    def test_next_start_with_several_profiles_asks_again(self):
+        acct = self.startWith(STORED_SESSION, profiles(('p1', False), ('p2', False)))
+
+        self.assertEqual(acct.ID, 'p1')
+        self.assertTrue(asksForProfile(acct))
+
+    def test_automatically_sign_in_keeps_the_stored_profile(self):
+        ENV.settings['auto_signin'] = 'true'
+
+        acct = self.startWith(STORED_SESSION, profiles(('p1', False), ('p2', True)))
+
+        self.assertEqual(acct.ID, 'p1')
+        self.assertFalse(asksForProfile(acct))
+
+    def test_a_stored_profile_that_is_gone_asks_again(self):
+        acct = self.startWith(dict(STORED_SESSION, profile_id='p9'), profiles(('p1', False), ('p2', False)))
+
+        self.assertIsNone(acct.ID)
+        self.assertTrue(asksForProfile(acct))

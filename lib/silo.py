@@ -160,6 +160,31 @@ def loadCredentials(serverId):
     return credentials, user
 
 
+def chooseProfile(account):
+    """
+    Whether Home opens as the acting profile or the profile picker comes first (account.isAuthenticated, which
+    lib/main.py reads), as Plex's account decided it. A code sign-in for the whole account binds no profile: the only
+    profile is taken when there is just one (the picker still asks for its PIN), else the picker shows. A stored
+    profile is kept with Automatically Sign In, or when it is the only one and has no PIN.
+    """
+    credentials = account.client.credentials
+    if credentials.profileId and account.getHomeUser(credentials.profileId) is None:
+        credentials.profileId = credentials.profileToken = None  # removed since: choose again
+        account.isAuthenticated = False
+    if account.isAuthenticated:
+        return
+    if not credentials.profileId and len(account.homeUsers) == 1:
+        only = account.homeUsers[0]
+        if only.isProtected:
+            credentials.profileId = only.id
+        else:
+            account.switchHomeUser(only.id)
+        return
+    account.isAuthenticated = bool(credentials.profileId) and bool(
+        util.getSetting('auto_signin', False) or (len(account.homeUsers) <= 1 and not account.isProtected)
+    )
+
+
 def init(session=None):
     """
     Get SM4K ready to open Home: a server (asked for on first run), a session (signed in with a code when there is
@@ -185,7 +210,7 @@ def init(session=None):
             credentials.accessToken, credentials.refreshToken = result.accessToken, result.refreshToken
             credentials.profileId, credentials.profileToken = result.profileId, result.profileToken
             saveCredentials(stored.serverId, credentials, user)
-            account.isAuthenticated = True
+            account.isAuthenticated = bool(result.profileId)  # a session bound to one profile goes home as it
         try:
             account.updateHomeUsers()
             break
@@ -199,6 +224,7 @@ def init(session=None):
             )
             return False
 
+    chooseProfile(account)
     plexapp.ACCOUNT = pnUtil.ACCOUNT = account
     plexapp.SERVERMANAGER = pnUtil.SERVERMANAGER = SiloServerManager([SiloServer(stored, client)])
     return True
