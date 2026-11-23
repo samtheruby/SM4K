@@ -43,36 +43,4 @@
     <label>$INFO[Window.Property(pin)]</label>
 </control>
 
-<control type="grouplist" id="400">
-    <defaultcontrol>406</defaultcontrol>
-    <posx>265</posx>
-    <posy>{{ vscale(708) }}</posy>
-    <width>1000</width>
-
-    <height>{{ vscale(200) }}</height>
-    <align>left</align>
-    <itemgap>0</itemgap>
-    <orientation>horizontal</orientation>
-    <control type="image">
-        <width>200</width>
-        <height>{{ vscale(200) }}</height>
-        <texture>$INFO[Window.Property(pin.image.0)]</texture>
-    </control>
-    <control type="image">
-        <width>200</width>
-        <height>{{ vscale(200) }}</height>
-        <texture>$INFO[Window.Property(pin.image.1)]</texture>
-    </control>
-    <control type="image">
-        <width>200</width>
-        <height>{{ vscale(200) }}</height>
-        <texture>$INFO[Window.Property(pin.image.2)]</texture>
-    </control>
-    <control type="image">
-        <width>200</width>
-        <height>{{ vscale(200) }}</height>
-        <texture>$INFO[Window.Property(pin.image.3)]</texture>
-    </control>
-
-</control>
 {% endblock controls %}
