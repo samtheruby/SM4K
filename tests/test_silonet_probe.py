@@ -23,7 +23,9 @@ def recorded(name):
 class ProbeTest(KodiTestCase):
     def test_probe_reads_identity_and_info(self):
         session = FakeSession(
-            FakeResponse(200, recorded('system_info.json')), FakeResponse(200, recorded('system_identity.json'))
+            FakeResponse(200, recorded('system_info.json')),
+            FakeResponse(200, recorded('system_identity.json')),
+            FakeResponse(200, recorded('theme_branding.json')),
         )
 
         info = probe('http://silo.lan:8090', DEVICE, session=session)
@@ -32,11 +34,25 @@ class ProbeTest(KodiTestCase):
         self.assertEqual(info.serverVersion, 'a2ec4094')
         self.assertEqual(info.apiMajor, 2)
         self.assertTrue(info.contractDigest.startswith('e9fc1d87'))
+        self.assertEqual(info.name, 'Silo')
         self.assertEqual(
             [c['url'] for c in session.calls],
-            ['http://silo.lan:8090/api/v2/system/info', 'http://silo.lan:8090/api/v2/system/identity'],
+            [
+                'http://silo.lan:8090/api/v2/system/info',
+                'http://silo.lan:8090/api/v2/system/identity',
+                'http://silo.lan:8090/api/v2/theme/branding',
+            ],
         )
         self.assertTrue(all('Authorization' not in c['headers'] for c in session.calls))
+
+    def test_a_server_without_branding_has_no_name(self):
+        session = FakeSession(
+            FakeResponse(200, recorded('system_info.json')),
+            FakeResponse(200, recorded('system_identity.json')),
+            FakeResponse(404),
+        )
+
+        self.assertIsNone(probe('http://silo.lan:8090', DEVICE, session=session).name)
 
     def test_rejects_other_api_major(self):
         answer = dict(recorded('system_info.json'), api_major=3)

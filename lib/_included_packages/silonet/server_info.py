@@ -10,11 +10,21 @@ SUPPORTED_API_MAJOR = 2
 
 
 class ServerInfo:
-    def __init__(self, serverId, serverVersion, apiMajor, contractDigest):
+    def __init__(self, serverId, serverVersion, apiMajor, contractDigest, name=None):
         self.serverId = serverId
+        self.name = name
         self.serverVersion = serverVersion
         self.apiMajor = apiMajor
         self.contractDigest = contractDigest
+
+
+def serverName(client):
+    """The name the server's owner gave it (unauthenticated branding), or None."""
+    try:
+        branding = client.request('GET', '/api/v2/theme/branding', profile=False)
+    except SiloError:
+        return None
+    return branding.get('server_name') if isinstance(branding, dict) else None
 
 
 def probe(baseUrl, device, session=None):
@@ -28,7 +38,9 @@ def probe(baseUrl, device, session=None):
         if info['api_major'] != SUPPORTED_API_MAJOR:
             raise SiloIncompatible(0, 'unsupported_api', f'API {info["api_major"]} on Silo {version}')
         identity = client.request('GET', '/api/v2/system/identity', profile=False)
-        return ServerInfo(identity['server_id'], version, info['api_major'], info.get('contract_digest', ''))
+        return ServerInfo(
+            identity['server_id'], version, info['api_major'], info.get('contract_digest', ''), serverName(client)
+        )
     except (SiloUnavailable, SiloIncompatible):
         raise
     except (SiloError, ValueError, KeyError, TypeError) as e:

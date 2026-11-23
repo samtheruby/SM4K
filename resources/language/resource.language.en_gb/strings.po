@@ -4108,3 +4108,15 @@ msgstr ""
 msgctxt "#35246"
 msgid "Couldn't sign in. Please try again."
 msgstr ""
+
+msgctxt "#35247"
+msgid "Silo server address, for example http://192.168.1.10:8090"
+msgstr ""
+
+msgctxt "#35248"
+msgid "Could not reach a Silo server at {address}."
+msgstr ""
+
+msgctxt "#35249"
+msgid "{address} is not a Silo server SiloMod can use."
+msgstr ""
