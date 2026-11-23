@@ -6,9 +6,10 @@ before anything under `lib/` is imported.
 ## Running
 
 ```sh
+python3 -m pip install -r requirements-dev.txt  # once: pytest, plus six, requests and Pillow (Kodi supplies those)
 python3 -m pytest                          # nicest output
 python3 -m pytest tests/test_templates.py  # one area
-python3 -m unittest discover -s tests -t . # no dependencies at all
+python3 -m unittest discover -s tests -t . # without pytest
 ```
 
 Tests are plain `unittest.TestCase` classes, so both runners work. pytest is
