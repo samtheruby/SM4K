@@ -13,6 +13,13 @@ from .errors import SiloError
 SECTION_TYPES = {'movies': 'movie', 'series': 'show'}
 
 
+class SiloConnection:
+    """A Silo server's one connection, its base URL: what plexnet reads of PlexServer.activeConnection."""
+
+    def __init__(self, address):
+        self.address = address
+
+
 def container(children=()):
     root = ElementTree.Element('MediaContainer', {'size': str(len(children))})
     root.extend(children)
@@ -22,14 +29,17 @@ def container(children=()):
 class SiloServer:
     offline = False
     suspect = False
+    gone = False
     owned = True
     platform = 'silo'
+    pendingReachabilityRequests = 0  # Plex's connection tests; a Silo server has one address
 
     def __init__(self, stored, client):
         self.stored = stored
         self.client = client
         self.uuid = stored.serverId
         self.name = stored.name or stored.baseUrl
+        self.activeConnection = SiloConnection(client.baseUrl)
         self._unmapped = set()
         self._routes = {'/library/sections': self._sections}
 
@@ -80,6 +90,19 @@ class SiloServer:
 
     def isReachable(self, onlySupported=True):
         return True
+
+    def updateReachability(self, force=True, allowFallback=False):
+        pass  # no connection to test: a request that fails says so itself
+
+    def dropIdleConnections(self):
+        pass  # requests' session opens new connections itself after a sleep
+
+    def hubs(self, section=None, count=None, search_query=None, section_ids=None, continue_watching_count=None):
+        """Home's and a library's rows: none until Silo's home layout is mapped."""
+        return []
+
+    def playlists(self):
+        return []  # Silo has no playlists
 
     def library(self):
         from plexnet import plexlibrary

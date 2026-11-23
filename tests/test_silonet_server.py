@@ -3,6 +3,8 @@ silonet.server: SiloServer answers the Plex paths Uno's object model and screens
 Plex-shaped XML; and SiloServerManager holds the Silo servers the way plexapp.SERVERMANAGER held Plex's.
 """
 
+from unittest import mock
+
 from kodienv import ENV
 from plexnet import plexlibrary
 from silonet.client import Credentials, DeviceIdentity, SiloClient
@@ -10,6 +12,7 @@ from silonet.server import SiloServer
 from silonet.servermanager import SiloServerManager
 
 from lib.silo import StoredServer
+from lib.windows import home, section_ids, sidebar_model
 
 from .base import KodiTestCase
 from .silonet_fakes import FakeResponse, FakeSession
@@ -73,6 +76,49 @@ class SiloServerTest(KodiTestCase):
         self.assertEqual((srv.uuid, srv.name), ('srv-1', 'Silo'))
         self.assertEqual(srv.buildUrl('/api/v2/x'), 'http://silo.lan:8090/api/v2/x')
         self.assertEqual(srv.getImageTranscodeURL('https://silo.lan/p.webp', 300, 450), 'https://silo.lan/p.webp')
+
+
+class SiloServerOnHomeTest(KodiTestCase):
+    """Home and its sidebar read a Plex server's connection state before they ask it anything (activeConnection,
+    pendingReachabilityRequests, gone): a Silo server has its one address and is asked directly."""
+
+    def test_sidebar_lists_its_libraries(self):
+        srv = server(FakeSession(LIBRARIES))
+
+        with (
+            mock.patch.object(sidebar_model.SectionsFetchTask, 'start', lambda task: task.run()),
+            mock.patch.dict(sidebar_model._serverSections, clear=True),
+            mock.patch.object(sidebar_model, '_sectionsFetching', set()),
+        ):
+            sidebar_model.serverSections(srv)
+            listed = sidebar_model.knownSections('srv-1')
+
+        self.assertEqual([s.title for s in listed], ['1080p Movies', 'Shows'])
+
+    def test_home_asks_it_for_rows_and_has_none_yet(self):
+        got = []
+
+        home.HomeHubsTask().setup(
+            home.home_section, lambda section, rows: got.append(rows), [(server(FakeSession()), ['lib-m'])]
+        ).run()
+
+        self.assertEqual(list(got[0]), [])
+        self.assertEqual(got[0].answers, {'srv-1': (('lib-m',), [])})
+
+    def test_a_library_does_not_wait_for_a_connection_test(self):
+        self.assertTrue(section_ids.awaitConnection(server(FakeSession()), 0.1))
+
+    def test_sidebar_has_no_playlists_entry(self):
+        # Silo has no playlists (D4); the sidebar asks on the main thread as it builds
+        with mock.patch.dict(sidebar_model._hasPlaylists, clear=True):
+            self.assertFalse(sidebar_model.hasPlaylists(server(FakeSession())))
+
+    def test_waking_from_sleep_drops_no_connections(self):
+        srv = server(FakeSession())
+
+        srv.dropIdleConnections()
+
+        self.assertTrue(section_ids.awaitConnection(srv, 0.1))
 
 
 class SiloServerManagerTest(KodiTestCase):
