@@ -4,16 +4,23 @@ SM4K's Silo session: signing in with a code shown on the TV (silonet.auth) throu
 
 import json
 
-from kodi_six import xbmcgui
+from kodi_six import xbmc, xbmcgui
+from plexnet import plexapp
+from plexnet import util as pnUtil
 from silonet import auth
-from silonet.errors import SiloIncompatible, SiloUnavailable
+from silonet.account import SiloAccount
+from silonet.client import Credentials, DeviceIdentity, SiloClient
+from silonet.errors import SiloAuthError, SiloError, SiloIncompatible, SiloUnavailable
+from silonet.server import SiloServer
 from silonet.server_info import probe
+from silonet.servermanager import SiloServerManager
 
 from . import util
 from .util import T
 from .windows import signin
 
 SERVERS_SETTING = 'silo_servers_json'
+CREDENTIALS_SETTING = 'silo_credentials_json'
 
 # how often a wait checks for Back while it sleeps
 WAIT_STEP = 0.1
@@ -113,3 +120,85 @@ def signIn(client):
     msgId, msg = FAILURES.get(result.status, (35246, "Couldn't sign in. Please try again."))
     util.messageDialog(T(32427, 'Failed'), T(msgId, msg))
     return None
+
+
+def deviceIdentity():
+    """This Kodi as Silo sees it: Uno's client ID (plexnet creates it on first run) and Kodi's device name."""
+    name = xbmc.getInfoLabel('System.FriendlyName') or 'Kodi'
+    return DeviceIdentity(pnUtil.X_PLEX_IDENTIFIER, name, 'kodi', util.ADDON.getAddonInfo('version'))
+
+
+def saveCredentials(serverId, credentials, user):
+    util.setSetting(
+        CREDENTIALS_SETTING,
+        json.dumps(
+            {
+                'server_id': serverId,
+                'access_token': credentials.accessToken,
+                'refresh_token': credentials.refreshToken,
+                'profile_id': credentials.profileId,
+                'profile_token': credentials.profileToken,
+                'user': {'role': user.get('role'), 'username': user.get('username')},
+            }
+        ),
+    )
+
+
+def loadCredentials(serverId):
+    """The stored session for this server, saved again whenever a refresh rotates it; and the account's user."""
+    try:
+        data = json.loads(util.getSetting(CREDENTIALS_SETTING, '') or '{}')
+    except ValueError:
+        data = {}
+    if not isinstance(data, dict) or data.get('server_id') != serverId:
+        data = {}
+    user = dict(data.get('user') or {})
+    credentials = Credentials(
+        data.get('access_token'), data.get('refresh_token'), data.get('profile_id'), data.get('profile_token')
+    )
+    credentials.onChange = lambda changed: saveCredentials(serverId, changed, user)
+    return credentials, user
+
+
+def init(session=None):
+    """
+    Get SM4K ready to open Home: a server (asked for on first run), a session (signed in with a code when there is
+    none or it ended), and the account and server manager Uno's screens use. False when the user gave up or the
+    server can't be reached.
+    """
+    device = deviceIdentity()
+    servers = storedServers()
+    stored = servers[-1] if servers else addServerDialog(device, session=session)
+    if stored is None:
+        return False
+
+    credentials, user = loadCredentials(stored.serverId)
+    client = SiloClient(stored.baseUrl, device, credentials, session=session)
+    account = SiloAccount(client, user)
+    while True:
+        if not credentials.accessToken:
+            result = signIn(client)
+            if result is None:
+                return False
+            user.clear()
+            user.update(result.user)
+            credentials.accessToken, credentials.refreshToken = result.accessToken, result.refreshToken
+            credentials.profileId, credentials.profileToken = result.profileId, result.profileToken
+            saveCredentials(stored.serverId, credentials, user)
+            account.isAuthenticated = True
+        try:
+            account.updateHomeUsers()
+            break
+        except SiloAuthError:
+            util.DEBUG_LOG('Silo: the session ended, signing in again')
+            credentials.accessToken = credentials.refreshToken = credentials.profileToken = None
+            saveCredentials(stored.serverId, credentials, user)
+        except SiloError:
+            util.messageDialog(
+                T(32427, 'Failed'), T(35252, "Can't reach the Silo server. Check your connection and try again.")
+            )
+            return False
+
+    plexapp.ACCOUNT = pnUtil.ACCOUNT = account
+    plexapp.SERVERMANAGER = pnUtil.SERVERMANAGER = SiloServerManager([SiloServer(stored, client)])
+    return True

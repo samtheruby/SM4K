@@ -30,7 +30,7 @@ class SiloAccount:
 
     def __init__(self, client, user=None):
         self.client = client
-        self.user = user or {}
+        self.user = user if user is not None else {}  # shared: sign-in fills it in later
         self.homeUsers = []
         self.switchUser = False
         self.isOffline = False
