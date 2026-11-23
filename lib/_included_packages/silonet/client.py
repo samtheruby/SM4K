@@ -79,7 +79,7 @@ class SiloClient:
         self.credentials = credentials
         self.session = session or requests.Session()
         self.timeout = timeout
-        self._coolUntil = 0.0
+        self._coolUntil = {}  # (method, path) -> monotonic time: Silo rate-limits per budget, not per client
 
     def request(self, method, path, params=None, json=None, profile=True):
         """The decoded JSON answer, or None for an empty one. Raises a silonet.errors type for every failure."""
@@ -92,7 +92,7 @@ class SiloClient:
             response = self._send(method, path, params, json, profile)
             if response.status_code == 401:
                 raise SiloAuthError(401, *problemOf(response))
-        return self._result(response)
+        return self._result(response, method, path)
 
     def _refresh(self):
         response = self._send(
@@ -100,7 +100,7 @@ class SiloClient:
         )
         if response.status_code == 401:
             raise SiloAuthError(401, *problemOf(response))
-        tokens = self._result(response)
+        tokens = self._result(response, 'POST', REFRESH_PATH)
         self.credentials.rotate(tokens['access_token'], tokens.get('refresh_token') or self.credentials.refreshToken)
 
     def _headers(self, profile, authorize):
@@ -115,7 +115,7 @@ class SiloClient:
         return headers
 
     def _send(self, method, path, params, json, profile, authorize=True):
-        remaining = self._coolUntil - time.monotonic()
+        remaining = self._coolUntil.get((method, path), 0) - time.monotonic()
         if remaining > 0:
             raise SiloRateLimited(429, 'rate_limit_exceeded', 'cooling down', int(remaining + 0.999))
 
@@ -133,7 +133,7 @@ class SiloClient:
             log(f'{method} {path} failed: {type(e).__name__}')
             raise SiloUnavailable(0, 'unreachable', type(e).__name__)
 
-    def _result(self, response):
+    def _result(self, response, method, path):
         status = response.status_code
         if status < 400:
             if status == 204 or not response.content:
@@ -144,7 +144,7 @@ class SiloClient:
         log(f'answered {status} {name}')
         if status == 429:
             wait = retryAfter(response) or 1
-            self._coolUntil = time.monotonic() + wait
+            self._coolUntil[(method, path)] = time.monotonic() + wait
             raise SiloRateLimited(status, name, detail, wait)
         if status == 503:
             raise SiloUnavailable(status, name, detail, retryAfter(response))

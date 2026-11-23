@@ -147,6 +147,17 @@ class SiloClientTest(KodiTestCase):
 
         self.assertEqual(len(session.calls), 1)
 
+    def test_429_pauses_only_the_endpoint_that_was_limited(self):
+        session = FakeSession(
+            problem(429, 'rate_limited', headers={'Retry-After': '300'}), FakeResponse(200, {'items': []})
+        )
+        client = makeClient(session)
+
+        with self.assertRaises(errors.SiloRateLimited):
+            client.request('POST', '/api/v2/profiles/p2/verify-pin', json={'pin': '0000'})
+
+        self.assertEqual(client.request('GET', '/api/v2/profiles', profile=False), {'items': []})
+
     def test_503_dependency_unavailable_is_unavailable(self):
         session = FakeSession(problem(503, 'dependency_unavailable', headers={'Retry-After': '2'}))
 
