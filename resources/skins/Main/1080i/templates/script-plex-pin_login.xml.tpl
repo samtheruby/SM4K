@@ -7,29 +7,28 @@
     <height>1080</height>
     <texture background="true">script.plex/home/background-fallback_black.png</texture>
 </control>
-<control type="image">
-    <visible>!String.IsEmpty(Window.Property(pin.image.0))</visible>
-    <posx>0</posx>
-    <posy>{% if core.needs_scaling %}{{ vperc(vscale(1080)) }}{% else %}0{% endif %}</posy>
-    <width>1920</width>
-    <height>{{ vscale(1080) }}</height>
-    <texture>script.plex/sign_in/pin-display.jpg</texture>
+<control type="label">
+    <posx>210</posx>
+    <posy>{{ vscale(260) }}</posy>
+    <width>1500</width>
+    <height>{{ vscale(90) }}</height>
+    <font>font45_title</font>
+    <align>left</align>
+    <aligny>center</aligny>
+    <textcolor>FFFFFFFF</textcolor>
+    <label>$INFO[Window.Property(heading)]</label>
 </control>
-<control type="image">
-    <visible>String.IsEmpty(Window.Property(pin.image.0)) + String.IsEmpty(Window.Property(linking))</visible>
-    <posx>0</posx>
-    <posy>{% if core.needs_scaling %}{{ vperc(vscale(1080)) }}{% else %}0{% endif %}</posy>
-    <width>1920</width>
-    <height>{{ vscale(1080) }}</height>
-    <texture>script.plex/sign_in/generating-code.jpg</texture>
-</control>
-<control type="image">
-    <visible>!String.IsEmpty(Window.Property(linking))</visible>
-    <posx>0</posx>
-    <posy>{% if core.needs_scaling %}{{ vperc(vscale(1080)) }}{% else %}0{% endif %}</posy>
-    <width>1920</width>
-    <height>{{ vscale(1080) }}</height>
-    <texture>script.plex/sign_in/linking-account.jpg</texture>
+<control type="label">
+    <posx>210</posx>
+    <posy>{{ vscale(380) }}</posy>
+    <width>1500</width>
+    <height>{{ vscale(140) }}</height>
+    <font>font14</font>
+    <align>left</align>
+    <aligny>top</aligny>
+    <wrapmultiline>true</wrapmultiline>
+    <textcolor>FFFFFFFF</textcolor>
+    <label>$INFO[Window.Property(instructions)]</label>
 </control>
 
 <control type="label">

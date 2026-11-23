@@ -118,6 +118,14 @@ class PinLoginWindow(kodigui.BaseWindow):
         self.setProperty('pin.image.2', 'script.plex/sign_in/digits/{0}.png'.format(pin[2].upper()))
         self.setProperty('pin.image.3', 'script.plex/sign_in/digits/{0}.png'.format(pin[3].upper()))
 
+    def setCode(self, code):
+        """Silo's sign-in code (silonet.auth.DeviceCode): eight digits and the page to enter them on."""
+        from silonet.auth import formatUserCode
+        self.setProperty('heading', util.T(32460, 'Sign In'))
+        self.setProperty('instructions', util.T(35243, 'On a phone or computer, open {link} and enter this code:').format(
+            link=code.verificationUri))
+        self.setProperty('pin', formatUserCode(code.userCode))
+
     def setLinking(self):
         self.setProperty('linking', '1')
         self.setProperty('pin.image.0', '')

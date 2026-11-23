@@ -4092,3 +4092,19 @@ msgstr ""
 msgctxt "#35242"
 msgid "You're away after {time} with no user input (Note: playback never counts as being away)."
 msgstr ""
+
+msgctxt "#35243"
+msgid "On a phone or computer, open {link} and enter this code:"
+msgstr ""
+
+msgctxt "#35244"
+msgid "Sign-in was refused."
+msgstr ""
+
+msgctxt "#35245"
+msgid "The code expired before it was approved. Please try again."
+msgstr ""
+
+msgctxt "#35246"
+msgid "Couldn't sign in. Please try again."
+msgstr ""

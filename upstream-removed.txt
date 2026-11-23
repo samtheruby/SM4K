@@ -6,3 +6,6 @@ TESTING_SQUAD.md  # Plex Uno's list of testers
 changelog.txt  # Plex Uno's release history; this add-on keeps its own
 docs/settings-audit.md  # a one-off audit of Plex Uno's settings at 60ed0301, cited by nothing here
 docs/subtitle-selection.md  # how PM4K follows Plex's subtitle preselection, cited by nothing here
+resources/skins/Main/media/script.plex/sign_in/generating-code.jpg  # plex.tv's sign-in screen; SM4K's PIN window shows Silo's code as text
+resources/skins/Main/media/script.plex/sign_in/linking-account.jpg  # plex.tv's sign-in screen; SM4K's PIN window shows Silo's code as text
+resources/skins/Main/media/script.plex/sign_in/pin-display.jpg  # plex.tv's sign-in screen (Plex logo, plex.tv/link); replaced by text labels
