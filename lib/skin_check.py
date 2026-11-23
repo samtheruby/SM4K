@@ -18,9 +18,9 @@ from .util import T
 
 AUTO = 'auto'
 
-# A renamed copy of the add-on (script.plexmod-uno) has Plextuary builds of its own, renamed the same
-# way (skin.plextuary-uno), carrying the Inter 4 fonts text_metrics.py is measured for
-SKIN_SUFFIX = util.ADDON_ID[len(util.UPSTREAM_ADDON_ID):]
+# SM4K keeps Plex Uno's screens, so it pairs with Plex Uno's renamed Plextuary builds (skin.plextuary-uno),
+# carrying the Inter 4 fonts text_metrics.py is measured for, whatever SM4K's own add-on ID
+SKIN_SUFFIX = '-uno'
 
 # All three share the same Font.xml for every font we use; they differ in PlayerProcessInfo. font8
 # is only in the releases from August 2026 (pm4k1.13, pm4k1.15ce, 1.15cpm.a14.26) in FilHarr's fork of

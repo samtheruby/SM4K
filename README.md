@@ -1,48 +1,21 @@
-# PM4K / PlexMod for Kodi
+# SiloMod for Kodi (SM4K)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Z8Z8X6P9T)
+SiloMod lets you browse and play the films and series on your [Silo](https://siloserver.org) media server from Kodi.
 
-This is a modification of the official open-source Plex client for Kodi "plex-for-kodi" (Plex4Kodi)  semi-maintained by me (pannal).
+**Status: early development.** SiloMod does not connect to Silo yet. It is being changed over from Plex Uno step by
+step, so don't install it for everyday use.
 
-Contrary to how this repository was handled before, this client does _not_ claim to adhere to the Plex Inc. design guidelines, all the time.
+## Where it comes from
 
-It implements features that are not implemented in other official Plex clients and may implement others in non-conform ways.
+SiloMod is a fork of [Plex Uno](https://github.com/FilHarr/plex-for-kodi) by FilHarr, which is a reworked fork of
+[PlexMod for Kodi](https://github.com/pannal/plex-for-kodi) (PM4K) by pannal, which grew out of Plex's own Kodi
+add-on. SiloMod keeps Plex Uno's screens and replaces the parts that talk to Plex with parts that talk to Silo.
 
-It is still based off of the original P4K source and critical bugfixes might be PR'd back.
+## Installing
 
-## Active branches
-* [develop-kodi21](https://github.com/pannal/plex-for-kodi/tree/develop_kodi21) (Kodi 19, 20, 21 cross-compatible)
-* [develop-kodi18](https://github.com/pannal/plex-for-kodi/tree/develop_kodi18) (legacy)
+Not available yet. Releases will come through a Kodi repository, and this page will say how to add it.
 
-Master branch is based off of the official plex-for-kodi master branch.
+## Licence
 
-## Installation
-
-### Via repository (recommended)
-* Add `https://pm4k.eu` to your Kodi installation as a file source (Hit Add source in File Manager, click on the selected "`<None>`" in the list, enter `https://pm4k.eu`, OK, down, enter a name, hit OK)
-* Go to Settings->Addons, choose "Install from zip file", choose the file source you added and install the repository
-* Install Plex via Settings->Addons->Install from repository->Don't Panic->Video add-ons->Plex
-* Optional, recommended: Install Plextuary via Settings->Addons->Install from repository->Don't Panic->Look and Feel->Skin->Plextuary
-
-### Installation (stable only, not optimized, possibly outdated)
-* Install "PM4K for Kodi" from the official Kodi repository
-* Optional, recommended: Install Plextuary skin using the above
-
-### Manual
-* Checkout any branch of this GitHub repository, rename to `script.plexmod` and use as an addon (for it to work with "Install from zip", the contents of the zip should be the folder `script.plexmod`.
-
-### Installing to a read-only or write-protected location
-Set the environment variable `INSTALLATION_DIR_AVOID_WRITE` to any value before starting Kodi to prevent the addon from trying to write to its installation directory. Useful for package managers.
-
-## Translation
-You can help! Join the translation effort at [POEditor](https://poeditor.com/join/project/ASOl50YAXg) (thanks for the free open source license, guys).
-
-## Help/Bug Reports
-https://forums.plex.tv/t/plexmod-for-kodi-18-19-20-21/481208
-
-## License
-[LICENSE](https://github.com/plexinc/plex-for-kodi/blob/master/LICENSE.txt)
-
-## Powered by
-
-[![JetBrains logo.](https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.svg)](https://jb.gg/OpenSource)
+SiloMod is licensed under the GNU General Public License, version 2 only (GPL-2.0-only). `LICENSE.txt` also holds
+the licences of the packages bundled in `lib/_included_packages`.
