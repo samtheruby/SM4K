@@ -4,8 +4,10 @@ ask for from Silo's API, as Plex-shaped XML, so plexnet's classes keep working. 
 empty container (logged once): each port phase maps the paths its screens need.
 """
 
+import functools
 from xml.etree import ElementTree
 
+from . import home
 from .client import log
 from .errors import SiloError
 
@@ -42,6 +44,7 @@ class SiloServer:
         self.activeConnection = SiloConnection(client.baseUrl)
         self._unmapped = set()
         self._routes = {'/library/sections': self._sections}
+        self._homeCapabilities = None
 
     def __repr__(self):
         return f'<SiloServer {self.name}>'
@@ -50,6 +53,10 @@ class SiloServer:
         """The answer to a Plex path as XML; None when Silo couldn't answer (as PlexServer.query returns)."""
         route = path.split('?', 1)[0].rstrip('/') or '/'
         handler = self._routes.get(route)
+        if handler is None and route.startswith(home.ROW_PATH):
+            handler = functools.partial(
+                self._homeRow, route[len(home.ROW_PATH) :], kwargs.get('offset'), kwargs.get('limit')
+            )
         if handler is None:
             if route not in self._unmapped:
                 self._unmapped.add(route)
@@ -60,6 +67,16 @@ class SiloServer:
         except SiloError as e:
             log(f'{route} failed: {e.status} {e.type}')
             return None
+
+    def _homeRow(self, sectionId, offset=None, limit=None):
+        """A Home row's items for its See more grid: totalSize is what Silo answers of the row, and a page (offset,
+        limit) is cut from that; limit 0 asks for the count alone."""
+        items = home.rowItems(self.client, sectionId, self.homeCapabilities())
+        start = offset or 0
+        page = [] if limit == 0 else items[start : None if limit is None else start + limit]
+        root = container(page)
+        root.set('totalSize', str(len(items)))
+        return root
 
     def _sections(self):
         data = self.client.request('GET', '/api/v2/user/libraries') or {}
@@ -98,8 +115,30 @@ class SiloServer:
         pass  # requests' session opens new connections itself after a sleep
 
     def hubs(self, section=None, count=None, search_query=None, section_ids=None, continue_watching_count=None):
-        """Home's and a library's rows: none until Silo's home layout is mapped."""
-        return []
+        """Home's rows from Silo's home layout (silonet.home), in Silo's order. A library's rows and search aren't
+        mapped yet: none. Silo's home rows aren't per library, so section_ids doesn't narrow them."""
+        if section or search_query:
+            return []
+        from plexnet import plexlibrary, plexobjects, video  # noqa: F401 (video registers the item types)
+
+        try:
+            rows = home.homeRows(self.client, count, continue_watching_count, self.homeCapabilities())
+        except SiloError as e:
+            log(f'home layout failed: {e.status} {e.type}')
+            return []
+        root = container(rows)
+        hubsContainer = plexobjects.PlexContainer(root, initpath='/hubs', server=self, address='/hubs')
+        return [plexlibrary.Hub(elem, server=self, container=hubsContainer) for elem in root]
+
+    def homeCapabilities(self):
+        """What this Silo's home layout accepts (/api/v2/home/capabilities), asked once; {} while it can't answer."""
+        if self._homeCapabilities is None:
+            try:
+                self._homeCapabilities = self.client.request('GET', '/api/v2/home/capabilities') or {}
+            except SiloError as e:
+                log(f'home capabilities failed: {e.status} {e.type}')
+                return {}
+        return self._homeCapabilities
 
     def playlists(self):
         return []  # Silo has no playlists

@@ -95,15 +95,22 @@ class SiloServerOnHomeTest(KodiTestCase):
 
         self.assertEqual([s.title for s in listed], ['1080p Movies', 'Shows'])
 
-    def test_home_asks_it_for_rows_and_has_none_yet(self):
+    def test_home_binds_its_rows(self):
         got = []
+        session = FakeSession(
+            FakeResponse(200, {'state': 'available'}),
+            FakeResponse(
+                200, {'sections': [{'id': 's2', 'section_type': 'recently_added', 'title': 'Recently Added'}]}
+            ),
+            FakeResponse(200, {'items': [{'content_id': 'm1', 'type': 'movie', 'title': 'Dune'}], 'has_more': False}),
+        )
 
         home.HomeHubsTask().setup(
-            home.home_section, lambda section, rows: got.append(rows), [(server(FakeSession()), ['lib-m'])]
+            home.home_section, lambda section, rows: got.append(rows), [(server(session), ['lib-m'])]
         ).run()
 
-        self.assertEqual(list(got[0]), [])
-        self.assertEqual(got[0].answers, {'srv-1': (('lib-m',), [])})
+        self.assertEqual([(h.title, [i.title for i in h.items]) for h in got[0]], [('Recently Added', ['Dune'])])
+        self.assertEqual(list(got[0].answers), ['srv-1'])
 
     def test_a_library_does_not_wait_for_a_connection_test(self):
         self.assertTrue(section_ids.awaitConnection(server(FakeSession()), 0.1))
