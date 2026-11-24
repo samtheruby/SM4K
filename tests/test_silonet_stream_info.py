@@ -11,7 +11,7 @@ from plexnet import plexplayer
 from plexnet.videosession import VideoSessionInfo
 
 from .base import KodiTestCase, ensure_plex_interface
-from .silonet_fakes import FakeSession
+from .silonet_fakes import FakeSession, problem
 from .test_silonet_detail import MOVIE, server, tile
 from .test_silonet_playback import CAPABILITIES, NO_WATCH, decision, ok
 
@@ -34,6 +34,8 @@ SOURCE = {
     'audio_channels': 8,
 }
 RECIPE = ('video_codec', 'width', 'height', 'bitrate_kbps', 'dynamic_range', 'audio_codec', 'audio_channels')
+# Silo's answer about the connection the panel asks on (GET /api/v2/playback/connection)
+LOCAL = ok({'connection': 'local', 'learned_limit': None})
 
 
 def planned(delivery, recipe=None, transformations=(), container='mkv', source=SOURCE):
@@ -55,9 +57,9 @@ class SiloStreamInfoTest(KodiTestCase):
         super().setUp()
         ensure_plex_interface()
 
-    def panel(self, answer, film=FILM):
-        """The panel's lines while the film plays as answer plans it, as showPPIDialog() fills them."""
-        srv = server(FakeSession(ok(film), ok(CAPABILITIES), ok(answer, 201), NO_WATCH))
+    def panel(self, answer, film=FILM, connection=LOCAL):
+        """The panel's lines while the film plays as answer plans it, as showPPIDialog() fills them, on connection."""
+        srv = server(FakeSession(ok(film), ok(CAPABILITIES), ok(answer, 201), NO_WATCH, connection))
         movie = tile(srv, film).reload()
         plexplayer.PlexPlayer(movie, 0).build()
         found = srv.findVideoSession('the-players-session-id', movie.ratingKey)
@@ -134,3 +136,42 @@ class SiloStreamInfoTest(KodiTestCase):
         lines = self.panel(answer, film)
 
         self.assertEqual(lines['Audio'], 'aac, 4305->?kbit, 2ch, transcode')
+
+    def test_mode_says_lan_on_a_local_connection(self):
+        lines = self.panel(planned('original_http'))
+
+        self.assertEqual(lines['Mode'], 'directplay, lan (verified)')
+
+    def test_mode_says_remote_off_the_lan(self):
+        # Silo names a connection local, remote, or the network-access provider it came through (playback-api.md)
+        for connection in ('remote', 'provider:tailscale'):
+            with self.subTest(connection):
+                lines = self.panel(planned('original_http'), connection=ok({'connection': connection}))
+
+                self.assertEqual(lines['Mode'], 'directplay, remote')
+
+    def test_no_answer_about_the_connection_is_not_lan(self):
+        lines = self.panel(planned('original_http'), connection=problem(404, 'not_found'))
+
+        self.assertEqual(lines['Mode'], 'directplay, remote')
+
+    def test_mode_says_why_silo_changed_the_file(self):
+        answer = planned('server_remux_hls', {'audio_codec': 'eac3', 'audio_channels': 6}, container='hls')
+        answer['playback_plan']['decision_reason'] = 'surround_bitstream_conversion'
+
+        lines = self.panel(answer)
+
+        self.assertEqual(lines['Mode'], 'remux, surround bitstream conversion, lan (verified)')
+
+    def test_a_bitrate_the_file_doesnt_list_shows_the_new_one_alone(self):
+        # MOVIE's audio tracks list no bitrate, so neither the audio's nor the video's own is known
+        lower = {'video_codec': 'h264', 'width': 1280, 'height': 720, 'bitrate_kbps': 3608, 'dynamic_range': 'sdr'}
+        lower.update(audio_codec='aac', audio_channels=2)
+        answer = planned(
+            'server_transcode_hls', lower, ('video_to_h264', 'hdr_to_sdr_tonemap', 'audio_to_aac'), container='hls'
+        )
+
+        lines = self.panel(answer, MOVIE)
+
+        self.assertEqual(lines['Video'], 'hevc->h264, 4k->720p, 3608kbit, transcode')
+        self.assertEqual(lines['Audio'], 'truehd->aac, ?kbit, 8->2ch, transcode')
