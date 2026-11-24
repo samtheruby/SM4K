@@ -97,6 +97,7 @@ class SiloServer(SignalsMixin):
         self._routes = {'/library/sections': self._sections}
         self._homeCapabilities = None
         self._libraryTypes = {}  # library id -> Plex section type, from the library list (a collection's subtype)
+        self._libraryPaths = None  # library id -> its folders on the server (libraryLocations())
         self.playback = playback.Playback(client, getattr(client.device, 'clientVersion', ''))
         self._subtitleResults = {}  # a subtitle search result's key -> the result, for its download
         self._previews = {}  # file id -> its item's id, for a played file with seek-bar previews
@@ -237,6 +238,18 @@ class SiloServer(SignalsMixin):
                 )
             )
         return container(sections)
+
+    def libraryLocations(self, libraryId):
+        """A library's folders on the server, for path mapping (plexlibrary.LibrarySection.locations): GET
+        /api/v2/libraries, read once. None when Silo doesn't list them (it may refuse an account that isn't an
+        admin)."""
+        if self._libraryPaths is None:
+            try:
+                data = self.client.request('GET', '/api/v2/libraries') or {}
+            except SiloError:
+                return []
+            self._libraryPaths = {str(entry.get('id')): entry.get('paths') or [] for entry in data.get('items') or []}
+        return list(self._libraryPaths.get(str(libraryId), []))
 
     def buildUrl(self, path, includeToken=False):
         """An absolute URL for a path. A subtitle file's key (silonet.detail: /silo/subtitles/<file>/<source>/<ref>)
