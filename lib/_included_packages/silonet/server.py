@@ -5,14 +5,19 @@ empty container (logged once): each port phase maps the paths its screens need.
 """
 
 import functools
+import re
+from urllib.parse import parse_qsl
 from xml.etree import ElementTree
 
-from . import home
+from . import home, library
 from .client import log
 from .errors import SiloError
+from .items import container
 
 # Silo library types to the Plex section types plexlibrary knows; mixed libraries wait for a later phase
 SECTION_TYPES = {'movies': 'movie', 'series': 'show'}
+# a library's grid (plexlibrary.LibrarySection.all()) and its sort menu: /library/sections/<library id>/all|sorts
+LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter)$')
 
 
 class SiloConnection:
@@ -20,12 +25,6 @@ class SiloConnection:
 
     def __init__(self, address):
         self.address = address
-
-
-def container(children=()):
-    root = ElementTree.Element('MediaContainer', {'size': str(len(children))})
-    root.extend(children)
-    return root
 
 
 class SiloServer:
@@ -51,11 +50,28 @@ class SiloServer:
 
     def query(self, path, method=None, raw=False, **kwargs):
         """The answer to a Plex path as XML; None when Silo couldn't answer (as PlexServer.query returns)."""
-        route = path.split('?', 1)[0].rstrip('/') or '/'
+        route, _, queryString = path.partition('?')
+        route = route.rstrip('/') or '/'
         handler = self._routes.get(route)
         if handler is None and route.startswith(home.ROW_PATH):
             handler = functools.partial(
                 self._homeRow, route[len(home.ROW_PATH) :], kwargs.get('offset'), kwargs.get('limit')
+            )
+        libraryPath = LIBRARY_PATH.match(route) if handler is None else None
+        if libraryPath and libraryPath.group(2) == 'sorts':
+            handler = library.sortsContainer
+        elif libraryPath and libraryPath.group(2) == 'firstCharacter':
+            handler = functools.partial(
+                library.jumpBar, self.client, libraryPath.group(1), dict(parse_qsl(queryString))
+            )
+        elif libraryPath:
+            handler = functools.partial(
+                library.libraryItems,
+                self.client,
+                libraryPath.group(1),
+                dict(parse_qsl(queryString)),
+                kwargs.get('offset'),
+                kwargs.get('limit'),
             )
         if handler is None:
             if route not in self._unmapped:
@@ -81,19 +97,19 @@ class SiloServer:
     def _sections(self):
         data = self.client.request('GET', '/api/v2/user/libraries') or {}
         sections = []
-        for library in data.get('items') or []:
-            kind = SECTION_TYPES.get(library.get('type'))
+        for entry in data.get('items') or []:
+            kind = SECTION_TYPES.get(entry.get('type'))
             if kind is None:
                 continue
             sections.append(
                 ElementTree.Element(
                     'Directory',
                     {
-                        'key': library['id'],
-                        'uuid': library['id'],
-                        'title': library.get('name') or '',
+                        'key': entry['id'],
+                        'uuid': entry['id'],
+                        'title': entry.get('name') or '',
                         'type': kind,
-                        'thumb': library.get('poster_url') or '',
+                        'thumb': entry.get('poster_url') or '',
                     },
                 )
             )
