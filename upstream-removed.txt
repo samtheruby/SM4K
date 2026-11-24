@@ -34,3 +34,5 @@ resources/skins/Main/1080i/templates/script-plex-photo.xml.tpl  # the photo view
 resources/skins/Main/media/script.plex/indicators/camera.png  # only the photo viewer used it (D4)
 resources/skins/Main/media/script.plex/indicators/info-sep.png  # only the photo viewer used it (D4)
 resources/skins/Main/media/script.plex/thumb_fallbacks/broken-photo-thumb.png  # only the photo viewer used it (D4)
+lib/windows/playlist.py  # Plex playlist screen; Silo has no playlists (D4)
+resources/skins/Main/1080i/templates/script-plex-playlist.xml.tpl  # the playlist screen (D4)

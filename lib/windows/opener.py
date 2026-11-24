@@ -63,8 +63,6 @@ def open(obj, context=None, **kwargs):
         # track's own parentRatingKey (playqueue.py's track branch), so that round trip bought
         # nothing.
         return trackClicked(obj, **kwargs)
-    elif obj.TYPE in ('playlist'):
-        return playlistClicked(obj, context=context, **kwargs)
     elif obj.TYPE in ('clip'):
         from . import videoplayer
         return videoplayer.play(video=obj, context=context)
@@ -246,14 +244,6 @@ def trackClicked(track, container_path=None, **kwargs):
 
 def photoDirectoryClicked(photodirectory, context=None, **kwargs):
     return sectionClicked(photodirectory, context=context, **kwargs)
-
-
-def playlistClicked(pl, context=None, **kwargs):
-    from . import playlist
-    if context is not None:
-        context.openWindow(playlist.PlaylistWindow, playlist=pl, **kwargs)
-        return ''
-    return handleOpen(playlist.PlaylistWindow, playlist=pl, **kwargs)
 
 
 def collectionClicked(collection, context=None, **kwargs):
