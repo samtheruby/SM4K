@@ -10,7 +10,11 @@ same order (Review Focus #5). One past CATALOG_PAGE_MAX is asked in pieces.
 
 from xml.etree import ElementTree
 
+from . import home
 from .items import container, itemElements
+
+# a library row's own path, its <Hub> key: /hubs/silo/library/<library id>/<section id> (SiloServer's route)
+LIBRARY_ROW_PATH = home.ROW_PATH + 'library/'
 
 # the most items /api/v2/catalog answers a request
 CATALOG_PAGE_MAX = 200
@@ -105,3 +109,30 @@ def jumpBar(client, libraryId, args):
             ElementTree.Element('Directory', {'key': key, 'title': letter, 'size': str(end - run['position'])})
         )
     return container(entries)
+
+
+def libraryRows(client, libraryId, count):
+    """
+    A library's Recommended rows (SiloServer.hubs(section)) from Silo's own rows for it (D8): GET
+    /api/v2/library/{id}/sections, the ones with items for the profile, count items each. Silo doesn't say whether a
+    row has more (has_more is null), so a full row says so; its See more lists the row's own items.
+    """
+    answer = client.request(
+        'GET', f'/api/v2/library/{libraryId}/sections', params={'item_limit': count} if count else None
+    )
+    rows = []
+    for section in (answer or {}).get('sections') or []:
+        full = bool(count) and len(section.get('items') or []) >= count
+        rows.append(
+            home.hubElement(
+                dict(section, has_more=section.get('has_more') or full),
+                key=f'{LIBRARY_ROW_PATH}{libraryId}/{section["id"]}',
+            )
+        )
+    return rows
+
+
+def libraryRowItems(client, libraryId, sectionId):
+    """Every item element of one library row: GET /api/v2/library/{id}/sections/{section_id}/items."""
+    answer = client.request('GET', f'/api/v2/library/{libraryId}/sections/{sectionId}/items')
+    return itemElements((answer or {}).get('items'))

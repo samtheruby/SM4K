@@ -225,3 +225,68 @@ class SiloLibraryJumpBarTest(KodiTestCase):
         )
 
         self.assertFalse(bar)
+
+
+def librarySection(sid, kind, title, count):
+    return {
+        'id': sid,
+        'section_type': kind,
+        'title': title,
+        'items': [movie(n) for n in range(count)],
+        'collections': [],
+        'total_count': count,
+        'has_more': None,
+        'item_limit': 100,
+    }
+
+
+class SiloLibraryRowsTest(KodiTestCase):
+    """A library's Recommended rows (library_hubs: server.hubs(section.key, count)) from Silo's own rows for that
+    library (GET /api/v2/library/{id}/sections, D8), and each row's See more from that row's items."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+
+    def rows(self):
+        return FakeResponse(
+            200,
+            {
+                'sections': [
+                    librarySection('152896895625322561', 'recently_added', 'Recently Added Movies', 20),
+                    librarySection('152896895625584705', 'random', 'Random Picks', 4),
+                ]
+            },
+        )
+
+    def test_a_librarys_rows_in_silos_order(self):
+        session = FakeSession(self.rows())
+
+        hubs = server(session).hubs('2', count=20)
+
+        self.assertEqual([(h.title, len(h.items)) for h in hubs], [('Recently Added Movies', 20), ('Random Picks', 4)])
+        self.assertEqual(session.calls[0]['url'], 'http://silo.lan:8090/api/v2/library/2/sections')
+        self.assertEqual(session.calls[0]['params'], {'item_limit': 20})
+        self.assertEqual(len({h.getCleanHubIdentifier() for h in hubs}), 2)
+
+    def test_a_full_row_says_it_has_more(self):
+        hubs = server(FakeSession(self.rows())).hubs('2', count=20)
+
+        self.assertEqual([h.more.asBool() for h in hubs], [True, False])
+
+    def test_a_rows_see_more_lists_that_rows_items(self):
+        session = FakeSession(
+            self.rows(), FakeResponse(200, librarySection('152896895625322561', 'recently_added', 'x', 100))
+        )
+        srv = server(session)
+        hub = srv.hubs('2', count=20)[0]
+
+        answer = srv.query(hub.key, limit=0)
+
+        self.assertEqual(answer.get('totalSize'), '100')
+        self.assertEqual(
+            session.calls[1]['url'], 'http://silo.lan:8090/api/v2/library/2/sections/152896895625322561/items'
+        )
+
+    def test_no_rows_when_silo_cant_answer(self):
+        self.assertEqual(server(FakeSession(problem(503, 'dependency_unavailable'))).hubs('2', count=20), [])

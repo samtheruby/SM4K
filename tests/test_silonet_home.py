@@ -256,10 +256,9 @@ class SiloHomeRowsTest(KodiTestCase):
 
         self.assertEqual([h.more.asBool() for h in hubs], [False, True, False])
 
-    def test_a_librarys_rows_and_search_are_not_mapped_yet(self):
+    def test_search_is_not_mapped_yet(self):
         session = FakeSession()
 
-        self.assertEqual(server(session).hubs('lib-m', count=20), [])
         self.assertEqual(server(session).hubs(None, search_query='dune'), [])
         self.assertEqual(session.calls, [])
 
