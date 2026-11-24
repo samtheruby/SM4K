@@ -12,7 +12,7 @@ from silonet.account import SiloAccount
 from silonet.client import Credentials, DeviceIdentity, SiloClient
 from silonet.errors import SiloAuthError, SiloError, SiloIncompatible, SiloUnavailable
 from silonet.server import SiloServer
-from silonet.server_info import probe
+from silonet.server_info import loginOptions, probe
 from silonet.servermanager import SiloServerManager
 
 from . import util
@@ -21,6 +21,8 @@ from .windows import signin
 
 SERVERS_SETTING = 'silo_servers_json'
 CREDENTIALS_SETTING = 'silo_credentials_json'
+USERNAME_SETTING = 'silo_username'  # the last username signed in with; never the password
+CHANGE = 'change'  # signIn(): the user asked for another server address
 
 # how often a wait checks for Back while it sleeps
 WAIT_STEP = 0.1
@@ -77,9 +79,9 @@ def removeServer(serverId):
     saveServers([s for s in storedServers() if s.serverId != serverId])
 
 
-def addServerDialog(device, session=None):
-    """Ask for a Silo server's address until one answers or the user gives up: its StoredServer, or None."""
-    address = ''
+def addServerDialog(device, session=None, address=''):
+    """Ask for a Silo server's address (pre-filled with address) until one answers or the user gives up: its
+    StoredServer, or None."""
     while True:
         address = xbmcgui.Dialog().input(T(35247, 'Silo server address, for example http://192.168.1.10:8090'), address)
         if not address:
@@ -99,21 +101,42 @@ def addServerDialog(device, session=None):
             return None
 
 
-def signIn(client):
-    """Show Silo's sign-in code until someone approves it: the approved auth.PollResult, or None."""
+def signIn(client, address):
+    """The sign-in card until someone signs in: the session (auth.PollResult from an approved code, auth.Tokens from a
+    password), CHANGE when the user asked for another server address, or None when they gave up."""
     window = signin.PinLoginWindow.create()
+    window.setOptions(loginOptions(client), address, util.getSetting(USERNAME_SETTING, ''))
+    session = []
+
+    def signInWithPassword():
+        window.submitted = False
+        try:
+            session.append(auth.passwordLogin(client, window.username, window.password))
+        except SiloAuthError:
+            window.showError(T(35303, 'Wrong username or password.'))
+        except SiloError:
+            window.showError(T(35252, "Can't reach the Silo server. Check your connection and try again."))
+        else:
+            util.setSetting(USERNAME_SETTING, window.username)
+        return bool(session)
 
     def wait(seconds):
         for _ in range(max(1, int(seconds / WAIT_STEP))):
-            if window.abort or util.MONITOR.waitForAbort(WAIT_STEP):
+            if window.submitted and signInWithPassword():
+                return False  # the code it no longer needs is withdrawn
+            if window.abort or window.change or util.MONITOR.waitForAbort(WAIT_STEP):
                 return False
-        return not window.abort
+        return not (window.abort or window.change)
 
     try:
         result = auth.signInWithCode(auth.DeviceLogin(client), client.device.name, window.setCode, wait)
     finally:
         window.doClose()
 
+    if session:
+        return session[0]
+    if window.change:
+        return CHANGE
     if result is None or result.status == 'approved':
         return result
     util.DEBUG_LOG('Silo sign-in ended: {}', result.status)
@@ -202,7 +225,11 @@ def init(session=None):
     account = SiloAccount(client, user)
     while True:
         if not credentials.accessToken:
-            result = signIn(client)
+            result = signIn(client, stored.baseUrl)
+            if result == CHANGE:
+                # a new address is stored last, which the restart picks; none keeps the card on this one
+                addServerDialog(device, session=session, address=stored.baseUrl)
+                return init(session)
             if result is None:
                 return False
             user.clear()

@@ -18,6 +18,10 @@ class DeviceCode:
 
 
 class Tokens:
+    # a password sign-in is approved at once and binds no profile: the profile picker follows
+    status = 'approved'
+    profileId = profileToken = None
+
     def __init__(self, data):
         self.accessToken = data.get('access_token')
         self.refreshToken = data.get('refresh_token')

@@ -1,6 +1,6 @@
 """
 Telling whether an address is a Silo server SM4K can talk to, before anyone signs in: GET /api/v2/system/info and
-/api/v2/system/identity answer without credentials.
+/api/v2/system/identity answer without credentials, as do the branding and sign-in options the sign-in card shows.
 """
 
 from .client import Credentials, SiloClient
@@ -18,13 +18,35 @@ class ServerInfo:
         self.contractDigest = contractDigest
 
 
+class LoginOptions:
+    def __init__(self, name, subtitle, password):
+        self.name = name
+        self.subtitle = subtitle
+        self.password = password
+
+
+def _public(client, path):
+    """An unauthenticated answer as a dict; empty when the server gives none."""
+    try:
+        answer = client.request('GET', path, profile=False)
+    except SiloError:
+        return {}
+    return answer if isinstance(answer, dict) else {}
+
+
 def serverName(client):
     """The name the server's owner gave it (unauthenticated branding), or None."""
-    try:
-        branding = client.request('GET', '/api/v2/theme/branding', profile=False)
-    except SiloError:
-        return None
-    return branding.get('server_name') if isinstance(branding, dict) else None
+    return _public(client, '/api/v2/theme/branding').get('server_name')
+
+
+def loginOptions(client):
+    """What the sign-in card shows: the server's name and subtitle (branding), and whether it takes passwords
+    (/api/v2/auth/providers' password_login; an older server that doesn't say does)."""
+    branding = _public(client, '/api/v2/theme/branding')
+    providers = _public(client, '/api/v2/auth/providers')
+    return LoginOptions(
+        branding.get('server_name'), branding.get('login_subtitle') or '', providers.get('password_login') is not False
+    )
 
 
 def probe(baseUrl, device, session=None):
