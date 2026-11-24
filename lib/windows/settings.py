@@ -492,7 +492,8 @@ class Settings(object):
                              'keyboard, before it searches. Shorter shows results sooner; longer searches '
                              'less often while you type.')
                 ),
-                ThemeMusicSetting('theme_music', T(32480, 'Theme music'), 5),
+                # off until turned on (decision D15)
+                ThemeMusicSetting('theme_music', T(32480, 'Theme music'), 10),
                 BoolSetting(
                     'theme_music_loop', T(33737, 'Loop theme music'), False
                 ),

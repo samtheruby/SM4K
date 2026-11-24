@@ -333,7 +333,7 @@ class PlexInterface(plexapp.AppInterface):
         return util.addonSettings.unlockRes and 99999 or 2160
 
     def getThemeMusicValue(self):
-        index = 10 - self.getPreference("theme_music", 5)
+        index = 10 - self.getPreference("theme_music", 10)  # stored 10 is Off, the default (decision D15)
         if index > 0:
             return index * 10
         return 0

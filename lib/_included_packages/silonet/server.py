@@ -54,6 +54,10 @@ class SiloServer(SignalsMixin):
     # the player's playback info panel (seekdialog.py) looks for a Plex transcode session, which Silo has none of
     anyLANConnection = True
     sessions = ()
+    # theme music (lib/windows/mixins/thememusic.py) downloads a theme first unless the server is local
+    isLocal = False
+    # the formats Kodi plays a theme song in (ThemePlaybackRequest): Silo sends the original when one matches
+    THEME_FORMATS = ('mp3', 'mp4', 'm4a', 'flac', 'ogg', 'opus', 'wav', 'aac')
 
     def __init__(self, stored, client):
         SignalsMixin.__init__(self)  # the seek dialog's timeline and stream-terminated callbacks
@@ -200,6 +204,23 @@ class SiloServer(SignalsMixin):
         return self.playback.start(
             str(item.ratingKey), part.id, seconds, audioIndex, subtitleIndex, quality, bandwidthCap, hdr
         )
+
+    def themeUrl(self, item):
+        """The item's theme song (decision D15) as a short-lived URL (POST .../themes/{id}/playback), or None: no
+        theme, or Silo refused. Not logged: the URL is its own credential."""
+        themeId = str(item.get('theme') or '')
+        if not themeId:
+            return None
+        body = {'accepted_formats': [{'container': container} for container in self.THEME_FORMATS]}
+        try:
+            grant = self.client.request(
+                'POST', f'/api/v2/catalog/items/{item.ratingKey}/themes/{themeId}/playback', json=body
+            )
+        except SiloError as e:
+            log(f'theme of {item.ratingKey} failed: {e.status} {e.type}')
+            return None
+        url = (grant or {}).get('url') or ''
+        return self.client.baseUrl + url if url.startswith('/') else url or None
 
     def findVideoSession(self, sessionId, ratingKey):
         from plexnet import exceptions

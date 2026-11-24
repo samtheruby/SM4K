@@ -311,6 +311,10 @@ def detailElement(detail):
     root.extend(mediaElement(version) for version in versions)
     if detail.get('extras'):
         root.append(extrasElement(detail['extras']))
+    # the theme song's id, which SiloServer.themeUrl() asks a grant for when theme music plays
+    themes = (detail.get('themes') or {}).get('items') or []
+    if themes and themes[0].get('id'):
+        root.set('theme', str(themes[0]['id']))
     return root
 
 
