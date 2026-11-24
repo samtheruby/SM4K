@@ -504,22 +504,9 @@ class Settings(object):
         ),
         'video': (
             T(32053, 'Video'), (
-                QualitySetting('local_quality2', T(32020, 'Local Quality'), 16),
-                QualitySetting('remote_quality2', T(32021, 'Remote Quality'), 16),
-                QualitySetting('online_quality2', T(32022, 'Online Quality'), 16),
-                MultiOptionsSetting(
-                    'playback_features', T(33058, ''),
-                    ["playback_directplay", "playback_remux", "allow_4k"],
-                    (
-                        ('playback_directplay', T(32025, '')),
-                        ('playback_remux', T(32026, '')),
-                        ('allow_4k', T(32036, '')),
-                    )
-                ).description(T(33060, "").format(
-                    feature_ds=T(32026, ''),
-                    desc_ds=T(32979, ''),
-                    feature_4k=T(32036, ''),
-                    desc_4k=T(32102, ''))),
+                # one Quality (decision D12): Silo applies its own local and remote stream limits; Plex's playback
+                # features and extra codecs are gone with Plex's transcoder (Kodi reports what it plays itself)
+                QualitySetting('local_quality2', T(32397, 'Quality'), 16),
                 BoolSetting(
                     'disable_hdr', T(33660, 'Disable HDR'), False
                 ).description(T(33661, "If you don't want your client to handle HDR (or HDR-fallback), "
@@ -529,14 +516,6 @@ class Settings(object):
                     'clamp_video_bitrates', T(33685, 'Clamp video bitrate'), True
                 ).description(T(33686, "Only show bitrate targets lower than the current video's bitrate.")
                 ),
-                MultiOptionsSetting(
-                    'allowed_codecs', T(33059, ''),
-                    ["allow_hevc", "allow_vc1"],
-                    [
-                        ('allow_hevc', T(32037, '')),
-                        ('allow_vc1', T(32977, '')),
-                    ] + ([('allow_av1', T(32601, ''))] if util.KODI_VERSION_MAJOR >= 20 else [])
-                ).description(T(33061, "")),
             )
         ),
         'audio': (

@@ -7,6 +7,7 @@ attempt's progress and stop. Responses are written inline in the shape of /api/v
 """
 
 import re
+from unittest import mock
 
 from plexnet import nowplayingmanager, plexplayer, serverdecision, util
 
@@ -97,6 +98,41 @@ class SiloPlayTest(KodiTestCase):
         self.assertFalse(meta.isTranscoded)
         self.assertEqual(meta.playStart, 0)
         self.assertIs(player.getServerDecision(), player)
+
+    def built_with(self, quality=16, disableHdr=False):
+        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), ok(decision(), 201))
+        movie = tile(server(session), MOVIE).reload()
+        settings = type(movie.settings)
+        preference = settings.getPreference
+
+        def getPreference(self, name, default=None):
+            return disableHdr if name == 'disable_hdr' else preference(self, name, default)
+
+        with (
+            mock.patch.object(settings, 'getQualityIndex', lambda self, kind: quality),
+            mock.patch.object(settings, 'getPreference', getPreference),
+        ):
+            plexplayer.PlexPlayer(movie, 0).build()
+        return session.calls[2]['json']
+
+    def test_original_quality_has_no_cap(self):
+        body = self.built_with(16)
+
+        self.assertEqual(body['quality_preference'], 'auto')
+        self.assertNotIn('bandwidth_cap_kbps', body)
+
+    def test_a_lower_quality_is_a_bitrate_cap(self):
+        body = self.built_with(7)  # 3 Mbps on Uno's ladder
+
+        self.assertEqual((body['quality_preference'], body['bandwidth_cap_kbps']), ('auto', 3000))
+
+    def test_hdr_turned_off_asks_for_sdr(self):
+        body = self.built_with(disableHdr=True)
+
+        caps = body['client_capabilities']
+        self.assertFalse(caps['hdr'])
+        self.assertEqual(caps['hdr_details']['dolby_vision_profiles'], [])
+        self.assertFalse(caps['hdr_details']['hdr10'])
 
     def test_resuming_starts_where_it_was(self):
         player = self.built(ok(decision(start=596.5), 201), offset=600000)

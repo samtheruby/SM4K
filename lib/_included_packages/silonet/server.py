@@ -192,10 +192,14 @@ class SiloServer(SignalsMixin):
     def supportsFeature(self, feature):
         return False  # Plex server features (transcoder, BIF indexes); Silo's are asked of it directly
 
-    def startPlayback(self, item, part, seconds=0.0, audioIndex=None, subtitleIndex=None, quality='auto'):
+    def startPlayback(
+        self, item, part, seconds=0.0, audioIndex=None, subtitleIndex=None, quality='auto', bandwidthCap=None, hdr=True
+    ):
         """Starts a Silo attempt for the item's version (part: its Media's Part, whose id is Silo's file id) and
         returns it (silonet.playback.Attempt); PlaybackRefused when Silo decides it can't play."""
-        return self.playback.start(str(item.ratingKey), part.id, seconds, audioIndex, subtitleIndex, quality)
+        return self.playback.start(
+            str(item.ratingKey), part.id, seconds, audioIndex, subtitleIndex, quality, bandwidthCap, hdr
+        )
 
     def findVideoSession(self, sessionId, ratingKey):
         from plexnet import exceptions

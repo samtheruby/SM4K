@@ -103,9 +103,20 @@ def delivery(containers=CONTAINERS, claims=()):
 
 
 def startBody(
-    installationId, profileId, fileId, position=0.0, audioIndex=None, subtitleIndex=None, quality='auto', appVersion=''
+    installationId,
+    profileId,
+    fileId,
+    position=0.0,
+    audioIndex=None,
+    subtitleIndex=None,
+    quality='auto',
+    appVersion='',
+    bandwidthCap=None,
+    hdr=True,
 ):
-    """The start request (start-request.schema.json): what Kodi plays and which tracks the user chose."""
+    """The start request (start-request.schema.json): what Kodi plays and which tracks the user chose. A bitrate cap
+    (the Quality setting below Original, decision D12) has Silo transcode only a file above it; HDR off (the Disable
+    HDR setting) reports an SDR device, so Silo converts HDR for it."""
     body = {
         'installation_id': installationId,
         'protocol_version': PROTOCOL,
@@ -124,8 +135,10 @@ def startBody(
             'codecs_video_hardware': list(VIDEO_CODECS),
             'codecs_audio': list(AUDIO_CODECS),
             'containers': list(CONTAINERS),
-            'hdr': True,
-            'hdr_details': dict(HDR),
+            'hdr': hdr,
+            'hdr_details': dict(HDR)
+            if hdr
+            else {'hdr10': False, 'hdr10_plus': False, 'hlg': False, 'dolby_vision_profiles': []},
         },
         'client_playback_context': {
             'protocol_version': PROTOCOL,
@@ -141,6 +154,8 @@ def startBody(
             },
         },
     }
+    if bandwidthCap:
+        body['bandwidth_cap_kbps'] = int(bandwidthCap)
     if audioIndex is not None:
         body['audio_track_index'] = audioIndex
     if subtitleIndex is not None:
@@ -214,7 +229,17 @@ class Playback:
             self._installationId = answer.get('installation_id')
         return self._installationId
 
-    def start(self, key, fileId, position=0.0, audioIndex=None, subtitleIndex=None, quality='auto'):
+    def start(
+        self,
+        key,
+        fileId,
+        position=0.0,
+        audioIndex=None,
+        subtitleIndex=None,
+        quality='auto',
+        bandwidthCap=None,
+        hdr=True,
+    ):
         """Starts an attempt for the item (key: its ratingKey) and returns it; PlaybackRefused for a terminal."""
         previous = self.attempts.pop(key, None)
         if previous is not None:
@@ -229,6 +254,8 @@ class Playback:
                 subtitleIndex,
                 quality,
                 self.appVersion,
+                bandwidthCap,
+                hdr,
             )
             try:
                 decision = self.client.request('POST', '/api/v2/playback/start', json=body) or {}

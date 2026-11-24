@@ -242,11 +242,17 @@ class PlexPlayer(BasePlayer):
             position = max(0, position + self.item.settings.getPreference("resume_offset", -3500))
         audio = self.choice.audioStream
         subtitle = None if self.shouldSuppressSubtitleForAudioLanguage() else self.choice.subtitleStream
+        # the Quality setting (decision D12): Original lets Silo send the file, a lower one caps its bitrate
+        quality = self.item.settings.getQualityIndex(self.item.getQualityType(server))
+        bitrates = self.item.settings.getGlobal("transcodeVideoBitrates")
+        cap = int(bitrates[quality]) if 0 <= quality < len(bitrates) else 0
         try:
             attempt = server.startPlayback(self.item, part, position / 1000.0,
                                            audio.index.asInt() if audio else None,
                                            subtitle.index.asInt() if subtitle and not subtitle.index.asInt() < 0
-                                           else None)
+                                           else None,
+                                           bandwidthCap=cap or None,
+                                           hdr=not self.item.settings.getPreference("disable_hdr", False))
         except PlaybackRefused as e:
             raise DecisionFailure(e.reason, e.message)
         except SiloError as e:
