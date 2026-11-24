@@ -30,8 +30,9 @@ from .client import log
 from .errors import SiloError
 from .items import container
 
-# Silo library types to the Plex section types plexlibrary knows; mixed libraries wait for a later phase
-SECTION_TYPES = {'movies': 'movie', 'series': 'show'}
+# Silo library types to the Plex section types plexlibrary knows. A mixed library (movies and series together) is one
+# grid (D24): a film library's, whose tiles open as their own type
+SECTION_TYPES = {'movies': 'movie', 'series': 'show', 'mixed': 'movie'}
 # a library's grid (plexlibrary.LibrarySection.all()) and its sort menu: /library/sections/<library id>/all|sorts
 LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter|filters|genre|contentRating)$')
 # an item's detail (PlexObject.reload())

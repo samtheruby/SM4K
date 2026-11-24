@@ -50,15 +50,31 @@ class SiloServerTest(KodiTestCase):
 
         self.assertEqual(
             [(s.key, s.title, s.type) for s in sections],
-            [('lib-m', '1080p Movies', 'movie'), ('lib-s', 'Shows', 'show')],
+            [('lib-m', '1080p Movies', 'movie'), ('lib-s', 'Shows', 'show'), ('lib-x', 'test-files', 'movie')],
         )
         self.assertEqual(session.calls[0]['url'], 'http://silo.lan:8090/api/v2/user/libraries')
         self.assertEqual(session.calls[0]['headers']['X-Profile-Id'], 'p1')
 
-    def test_mixed_library_is_left_out(self):
-        container = server(FakeSession(LIBRARIES)).query('/library/sections')
+    def test_a_mixed_library_is_one_grid(self):
+        # D24: movies and series together, as one grid (a film library's, whose tiles open as their own type)
+        cards = {
+            'items': [
+                {'content_id': 'movie-1', 'type': 'movie', 'title': 'Dune'},
+                {'content_id': 'series-1', 'type': 'series', 'title': 'The Crocodile Hunter'},
+            ],
+            'total': 2,
+        }
+        session = FakeSession(LIBRARIES, FakeResponse(200, cards))
+        srv = server(session)
 
-        self.assertNotIn('lib-x', [d.get('key') for d in container])
+        mixed = [s for s in plexlibrary.Library(None, server=srv).sections() if s.key == 'lib-x'][0]
+        grid = srv.query('/library/sections/lib-x/all', offset=0, limit=50)
+
+        self.assertEqual(mixed.TYPE, 'movie')
+        self.assertEqual(session.calls[1]['params']['library_id'], 'lib-x')
+        self.assertEqual(
+            [(e.get('type'), e.get('title')) for e in grid], [('movie', 'Dune'), ('show', 'The Crocodile Hunter')]
+        )
 
     def test_unmapped_path_returns_empty_container_and_logs_once(self):
         srv = server(FakeSession())
@@ -93,7 +109,7 @@ class SiloServerOnHomeTest(KodiTestCase):
             sidebar_model.serverSections(srv)
             listed = sidebar_model.knownSections('srv-1')
 
-        self.assertEqual([s.title for s in listed], ['1080p Movies', 'Shows'])
+        self.assertEqual([s.title for s in listed], ['1080p Movies', 'Shows', 'test-files'])
 
     def test_home_binds_its_rows(self):
         got = []
