@@ -7,8 +7,8 @@ import json
 
 import requests
 from silonet import errors
-from silonet.client import DeviceIdentity
-from silonet.server_info import probe
+from silonet.client import Credentials, DeviceIdentity, SiloClient
+from silonet.server_info import loginOptions, probe
 
 from .base import KodiTestCase, fixture
 from .silonet_fakes import FakeResponse, FakeSession
@@ -80,3 +80,44 @@ class ProbeTest(KodiTestCase):
 
         with self.assertRaises(errors.SiloUnavailable):
             probe('http://silo.lan:8090', DEVICE, session=session)
+
+
+# /api/v2/auth/providers on the user's Silo (2026-11-24)
+PROVIDERS = {
+    'items': [{'id': 'local', 'display_name': 'Local', 'mode': 'credentials', 'default': True}],
+    'password_login': True,
+}
+
+
+class LoginOptionsTest(KodiTestCase):
+    """silonet.server_info.loginOptions(): what the sign-in card shows before anyone signs in."""
+
+    def options(self, *responses):
+        session = FakeSession(*responses)
+        options = loginOptions(SiloClient('http://silo.lan:8090', DEVICE, Credentials(), session=session))
+        return options, session
+
+    def test_the_servers_name_and_subtitle(self):
+        options, session = self.options(
+            FakeResponse(200, recorded('theme_branding.json')), FakeResponse(200, PROVIDERS)
+        )
+
+        self.assertEqual(
+            (options.name, options.subtitle, options.password), ('Silo', 'Sign in with an existing account.', True)
+        )
+        self.assertEqual(
+            [c['url'] for c in session.calls],
+            ['http://silo.lan:8090/api/v2/theme/branding', 'http://silo.lan:8090/api/v2/auth/providers'],
+        )
+
+    def test_a_server_without_password_sign_in(self):
+        options, _ = self.options(
+            FakeResponse(200, recorded('theme_branding.json')), FakeResponse(200, dict(PROVIDERS, password_login=False))
+        )
+
+        self.assertFalse(options.password)
+
+    def test_a_server_that_doesnt_say(self):
+        options, _ = self.options(FakeResponse(404), FakeResponse(404))
+
+        self.assertEqual((options.name, options.subtitle, options.password), (None, '', True))
