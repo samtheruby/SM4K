@@ -18,6 +18,19 @@ RESOLUTIONS = {'2160p': '4k', '4k': '4k', '1440p': '1080', '1080p': '1080', '108
 # crew jobs Uno shows as writers and producers (it has no other crew rows)
 WRITER_JOBS = frozenset(('Writer', 'Screenplay', 'Story', 'Teleplay', 'Novel', 'Characters', 'Author'))
 PRODUCER_JOBS = frozenset(('Producer',))
+# Silo's extra kinds (a free string in ItemExtraInfo) to Plex's extraType, what the extras row labels them by
+# (lib/metadata.py's EXTRA_MAP); any other kind is Other (12)
+EXTRA_TYPES = {
+    'trailer': 1,
+    'deleted_scene': 2,
+    'interview': 3,
+    'behind_the_scenes': 5,
+    'scene': 6,
+    'sample': 6,
+    'featurette': 10,
+    'short': 11,
+}
+OTHER_EXTRA = 12
 
 
 def element(tag, attrs):
@@ -66,11 +79,18 @@ def ratingElements(detail):
 
 
 def personElements(detail):
-    """Cast as <Role>, crew as <Director>/<Writer>/<Producer>, each with its Silo person id and photo."""
+    """Cast as <Role>, crew as <Director>/<Writer>/<Producer>, each with its Silo person id and photo. The id is also
+    its tagKey, the key the person screen asks every server by (lib/windows/person.py personKey())."""
     people = [
         element(
             'Role',
-            {'tag': p.get('name'), 'role': p.get('character'), 'id': p.get('person_id'), 'thumb': p.get('photo_url')},
+            {
+                'tag': p.get('name'),
+                'role': p.get('character'),
+                'id': p.get('person_id'),
+                'tagKey': p.get('person_id'),
+                'thumb': p.get('photo_url'),
+            },
         )
         for p in detail.get('cast') or []
     ]
@@ -84,7 +104,17 @@ def personElements(detail):
             else ('Producer' if job in PRODUCER_JOBS else None)
         )
         if tag:
-            people.append(element(tag, {'tag': p.get('name'), 'id': p.get('person_id'), 'thumb': p.get('photo_url')}))
+            people.append(
+                element(
+                    tag,
+                    {
+                        'tag': p.get('name'),
+                        'id': p.get('person_id'),
+                        'tagKey': p.get('person_id'),
+                        'thumb': p.get('photo_url'),
+                    },
+                )
+            )
     return people
 
 
@@ -207,6 +237,37 @@ def fileMediaElement(file):
     return media
 
 
+def extraType(kind):
+    name = str(kind or '').strip().lower().replace('-', '_').replace(' ', '_')
+    return EXTRA_TYPES.get(name, EXTRA_TYPES.get(name[:-1], OTHER_EXTRA) if name.endswith('s') else OTHER_EXTRA)
+
+
+def extrasElement(extras):
+    """The detail's extras (ItemExtraInfo) as Plex's <Extras>: clips with their title, still, length and extraType.
+    Playing them is Phase 5's."""
+    root = ElementTree.Element('Extras', {'size': str(len(extras))})
+    for extra in extras:
+        contentId = extra.get('content_id')
+        if not contentId:
+            continue
+        root.append(
+            element(
+                'Video',
+                {
+                    'type': 'clip',
+                    'ratingKey': contentId,
+                    'key': '/library/metadata/' + contentId,
+                    'title': extra.get('title'),
+                    'thumb': extra.get('still_url'),
+                    'duration': ms(extra['duration_seconds']) if extra.get('duration_seconds') else None,
+                    'extraType': extraType(extra.get('kind')),
+                    'subtype': extra.get('kind'),
+                },
+            )
+        )
+    return root
+
+
 def setSeason(root, season):
     """An episode's season (a Silo season, as /catalog/series/{id}/seasons lists it) as its Plex parent."""
     seasonId = season.get('content_id')
@@ -248,6 +309,8 @@ def detailElement(detail):
     root.extend(personElements(detail))
     root.extend(ratingElements(detail))
     root.extend(mediaElement(version) for version in versions)
+    if detail.get('extras'):
+        root.append(extrasElement(detail['extras']))
     return root
 
 
