@@ -256,6 +256,27 @@ class SiloTimelinesTest(KodiTestCase):
         self.assertEqual(session.calls[4]['url'], BASE + '/playback/S1/progress')
         self.assertEqual(session.calls[4]['json']['position'], 42.0)
 
+    def test_the_worker_ends_when_idle(self):
+        """The add-on's exit waits for every thread (lib/main.py waitForThreads()): an idle worker that never ended
+        made it hard-exit, and Kodi then reopened the half-closed add-on (seen on the box, 2026-11-24)."""
+        import threading
+        import time
+
+        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), ok(decision(), 201), NO_WATCH, ok({'outcome': 'applied'}))
+        srv = server(session)
+        movie = tile(srv, MOVIE).reload()
+        plexplayer.PlexPlayer(movie, 0).build()
+        manager = nowplayingmanager.NowPlayingManager()
+        item = util.AttributeDict(ratingKey='movie-tmdb-718821', duration=7344000, key=movie.key)
+        manager.updatePlaybackState('video', item, 'playing', 42000, server=srv)
+        manager.waitForTimelines(5)
+
+        deadline = time.time() + 5
+        while time.time() < deadline and any(t.name == 'silo.timelines' for t in threading.enumerate()):
+            time.sleep(0.1)
+
+        self.assertFalse(any(t.name == 'silo.timelines' for t in threading.enumerate()))
+
 
 class SiloPlayerSeamsTest(KodiTestCase):
     """What the player's seek dialog asks of the item's server: its signals (the timeline and stream-terminated
