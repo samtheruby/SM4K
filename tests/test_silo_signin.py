@@ -139,6 +139,10 @@ class SiloSignInTest(KodiTestCase):
             ('Silo', 'Sign in with an existing account.', 'http://silo.lan:8090', 'sam'),
         )
         self.assertEqual(props.get('password.enabled'), '1')
+        self.assertEqual(
+            (props.get('label.password.heading'), props.get('label.phone')),
+            ('Sign in with your password', 'Use your phone instead'),
+        )
 
     def test_typing_the_password_shows_dots(self):
         window = pinWindow()

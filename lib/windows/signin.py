@@ -58,6 +58,7 @@ class PinLoginWindow(kodigui.BaseWindow):
             ('username', util.T(35301, 'Username')),
             ('password', util.T(35302, 'Password')),
             ('signin', util.T(32460, 'Sign In')),
+            ('password.heading', util.T(35309, 'Sign in with your password')),
             ('phone', util.T(35304, 'Use your phone instead')),
             ('server', util.T(35305, 'Server')),
             ('change', util.T(35306, 'Change')),
