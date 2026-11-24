@@ -96,6 +96,7 @@ def server(session):
 
 
 def homeRows(session):
+    session.queue(FakeResponse(200, {'items': []}))  # no favorites (silonet.lists.favoritesRow())
     return server(session).hubs(None, count=20, section_ids=['lib-m'], continue_watching_count=40)
 
 
@@ -130,7 +131,7 @@ class SiloHomeRowsTest(KodiTestCase):
         homeRows(session)
 
         urls = [c['url'].replace('http://silo.lan:8090/api/v2', '') for c in session.calls]
-        self.assertEqual(urls, ['/home/capabilities', '/home/layout', '/home/sections/s3/items'])
+        self.assertEqual(urls, ['/home/capabilities', '/home/layout', '/home/sections/s3/items', '/favorites'])
         self.assertEqual(session.calls[1]['params'], {'include_items': 2, 'item_limit': 20})
         self.assertEqual(session.calls[2]['params'], {'item_limit': 20})
         self.assertEqual(session.calls[1]['headers']['X-Profile-Id'], 'p1')
@@ -170,7 +171,8 @@ class SiloHomeRowsTest(KodiTestCase):
 
         hubs = homeRows(session)
 
-        self.assertEqual([c['params'] for c in session.calls[1:]], [None, None, None, None])
+        self.assertEqual([c['params'] for c in session.calls[1:5]], [None, None, None, None])
+        self.assertEqual(session.calls[5]['params'], {'limit': 20})  # the favorites row
         self.assertEqual([len(h.items) for h in hubs], [0, 1, 0])
 
     def test_a_movie_tile(self):
