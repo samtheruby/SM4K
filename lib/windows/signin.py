@@ -14,9 +14,28 @@ class PinLoginWindow(kodigui.BaseWindow):
     width = 1920
     height = 1080
 
-    def __init__(self, *args, **kwargs):
-        self.abort = False
-        kodigui.BaseWindow.__init__(self, *args, **kwargs)
+    USERNAME_ID = 201
+    PASSWORD_ID = 202
+    SIGN_IN_ID = 203
+
+    # what the user did on the card, read by lib/silo.py's signIn() while it waits
+    abort = submitted = False
+    username = password = ''
+
+    def setOptions(self, options, address, username):
+        """The server's name and subtitle (silonet.server_info.LoginOptions), its address and the last username."""
+        self.username = username
+        self.setProperty('server.name', options.name or util.T(32460, 'Sign In'))
+        self.setProperty('subtitle', options.subtitle)
+        self.setProperty('address', address)
+        self.setProperty('username', username)
+        self.setProperty('password.enabled', '1' if options.password else '')
+
+    def showError(self, message):
+        """A failed password sign-in: the message, and the password to type again."""
+        self.password = ''
+        self.setProperty('password', '')
+        self.setProperty('error', message)
 
     def setCode(self, code):
         """Silo's sign-in code (silonet.auth.DeviceCode): eight digits and the page to enter them on."""
@@ -25,6 +44,16 @@ class PinLoginWindow(kodigui.BaseWindow):
         self.setProperty('instructions', util.T(35243, 'On a phone or computer, open {link} and enter this code:').format(
             link=code.verificationUri))
         self.setProperty('pin', formatUserCode(code.userCode))
+
+    def onClick(self, controlID):
+        if controlID == self.USERNAME_ID:
+            self.username = xbmcgui.Dialog().input(util.T(35301, 'Username'), self.username) or self.username
+            self.setProperty('username', self.username)
+        elif controlID == self.PASSWORD_ID:
+            self.password = xbmcgui.Dialog().input(util.T(35302, 'Password'), option=xbmcgui.ALPHANUM_HIDE_INPUT)
+            self.setProperty('password', '\N{BULLET}' * len(self.password))
+        elif controlID == self.SIGN_IN_ID:
+            self.submitted = True
 
     def onAction(self, action):
         try:

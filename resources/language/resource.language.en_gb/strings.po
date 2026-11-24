@@ -4321,3 +4321,15 @@ msgstr ""
 msgctxt "#35300"
 msgid "{0} votes"
 msgstr ""
+
+msgctxt "#35301"
+msgid "Username"
+msgstr ""
+
+msgctxt "#35302"
+msgid "Password"
+msgstr ""
+
+msgctxt "#35303"
+msgid "Wrong username or password."
+msgstr ""
