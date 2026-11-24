@@ -251,19 +251,39 @@ def detailElement(detail):
     return root
 
 
-def itemDetail(client, contentId, params=None):
-    """/library/metadata/<id>: the item's detail in a container, as plexnet's reload() reads data[0]. An episode's
-    season and a show's on-deck episode are extra requests; when Silo can't answer one, the item opens without it."""
+def itemDetail(client, contentIds, params=None):
+    """/library/metadata/<id>: the item's detail in a container, as plexnet's reload() reads data[0]; or several,
+    <id>,<id>,... (EpisodesReloadTask asks for the episodes in view at once, as Plex answers it). Silo has no such
+    request, so each is asked for, and an id among several that Silo can't answer is left out, as Plex leaves out what
+    it doesn't have. An episode's season and a show's on-deck episode are extra requests; when Silo can't answer one,
+    the item opens without it."""
+    ids = contentIds.split(',')
+    seasons = {}  # (series id, season number) -> the season, asked for once for the episodes of one season
+    elements = []
+    for contentId in ids:
+        try:
+            root = oneDetail(client, contentId, params, seasons)
+        except SiloError as e:
+            if len(ids) == 1:
+                raise
+            log(f'{contentId} failed: {e.status} {e.type}')
+            continue
+        if root is not None:
+            elements.append(root)
+    return container(elements)
+
+
+def oneDetail(client, contentId, params, seasons):
     answer = client.request('GET', f'/api/v2/catalog/items/{contentId}') or {}
     root = detailElement(answer)
     if root is None:
-        return container()
+        return None
     if answer.get('type') == 'episode' and answer.get('series_id') and answer.get('season_number') is not None:
+        place = (answer['series_id'], answer['season_number'])
         try:
-            season = client.request(
-                'GET', f'/api/v2/catalog/series/{answer["series_id"]}/seasons/{answer["season_number"]}'
-            )
-            setSeason(root, season or {})
+            if place not in seasons:
+                seasons[place] = client.request('GET', '/api/v2/catalog/series/{}/seasons/{}'.format(*place)) or {}
+            setSeason(root, seasons[place])
         except SiloError as e:
             log(f'season of {contentId} failed: {e.status} {e.type}')
     if answer.get('type') == 'series' and (params or {}).get('includeOnDeck') and answer.get('play_content_id'):
@@ -274,4 +294,4 @@ def itemDetail(client, contentId, params=None):
             episode = None
         if episode is not None:
             ElementTree.SubElement(root, 'OnDeck').append(episode)
-    return container([root])
+    return root

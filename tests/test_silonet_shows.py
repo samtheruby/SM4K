@@ -9,7 +9,7 @@ with its season (/catalog/series/{id}/seasons/{num}) and show. Responses are wri
 
 import copy
 
-from plexnet import video
+from plexnet import plexobjects, video
 
 from .base import KodiTestCase, ensure_plex_interface
 from .silonet_fakes import FakeResponse, FakeSession, problem
@@ -304,3 +304,48 @@ class SiloEpisodesTest(KodiTestCase):
 
         self.assertFalse(episode.reloadFailed)
         self.assertEqual((episode.title, episode.grandparentTitle), ('Undertow', 'Harbor Lights'))
+
+
+class SiloEpisodesAtOnceTest(KodiTestCase):
+    """EpisodesReloadTask (lib/windows/episodes.py) reloads the episodes in view with one request,
+    /library/metadata/<id>,<id>,..., as Plex answers it; Silo has no such request, so each is asked for."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+
+    def batch(self, session, ids):
+        return plexobjects.listItems(
+            server(session),
+            '/library/metadata/' + ','.join(ids),
+            return_data=True,
+            checkFiles=1,
+            includeChapters=1,
+            includeMarkers=1,
+        )
+
+    def test_several_episodes_at_once(self):
+        first = dict(EPISODE_2, content_id='episode-tvdb-1-1-1', episode_number=1, title='Arrival')
+        session = FakeSession(ok(first), ok(SEASON_ROW_1), ok(EPISODE_2))
+
+        data = self.batch(session, ['episode-tvdb-1-1-1', 'episode-tvdb-1-1-2'])
+
+        self.assertEqual(
+            [(d.get('ratingKey'), d.get('parentRatingKey')) for d in data],
+            [('episode-tvdb-1-1-1', 'season-tvdb-1-1'), ('episode-tvdb-1-1-2', 'season-tvdb-1-1')],
+        )
+        self.assertEqual(
+            [c['url'] for c in session.calls],
+            [
+                BASE + '/catalog/items/episode-tvdb-1-1-1',
+                BASE + '/catalog/series/series-tvdb-1/seasons/1',
+                BASE + '/catalog/items/episode-tvdb-1-1-2',
+            ],
+        )
+
+    def test_an_episode_silo_cant_find_among_several_is_left_out(self):
+        session = FakeSession(problem(404, 'not_found'), ok(EPISODE_2), ok(SEASON_ROW_1))
+
+        data = self.batch(session, ['episode-tvdb-1-1-9', 'episode-tvdb-1-1-2'])
+
+        self.assertEqual([d.get('ratingKey') for d in data], ['episode-tvdb-1-1-2'])
