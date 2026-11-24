@@ -1,5 +1,6 @@
 """
-SM4K's Silo session: signing in with a code shown on the TV (silonet.auth) through Uno's PIN window.
+SM4K's Silo session: its server (found on the network or typed in) and signing in on the sign-in card (silonet.auth)
+through Uno's PIN window.
 """
 
 import json
@@ -7,12 +8,12 @@ import json
 from kodi_six import xbmc, xbmcgui
 from plexnet import plexapp
 from plexnet import util as pnUtil
-from silonet import auth
+from silonet import auth, discovery
 from silonet.account import SiloAccount
 from silonet.client import Credentials, DeviceIdentity, SiloClient
 from silonet.errors import SiloAuthError, SiloError, SiloIncompatible, SiloUnavailable
 from silonet.server import SiloServer
-from silonet.server_info import loginOptions, probe
+from silonet.server_info import LoginOptions, loginOptions, probe
 from silonet.servermanager import SiloServerManager
 
 from . import util
@@ -65,14 +66,29 @@ def saveServers(servers):
     util.setSetting(SERVERS_SETTING, json.dumps([s.toJson() for s in servers]))
 
 
-def addServer(address, device, session=None):
-    """Probe the address and store the server; the same server at a new address replaces its old one."""
+def addServer(address, device, session=None, serverId=None):
+    """Probe the address and store the server; the same server at a new address replaces its old one. serverId: the
+    server expected there; another one raises SiloIncompatible."""
     baseUrl = normalizeUrl(address)
     info = probe(baseUrl, device, session=session)
+    if serverId and info.serverId != serverId:
+        raise SiloIncompatible(0, 'other_server', f'{baseUrl} is another server')
     stored = StoredServer(baseUrl, info.serverId, info.name)
     saveServers([s for s in storedServers() if s.serverId != info.serverId] + [stored])
     util.DEBUG_LOG('Silo: stored server {} ({})', stored.name or 'unnamed', info.serverVersion)
     return stored
+
+
+def relocate(stored, device, session=None):
+    """The stored server at a new address, found on the network under its ID (silonet.discovery) and stored there; None
+    when it isn't found."""
+    for found in discovery.find():
+        if found.serverId == stored.serverId and found.baseUrl != stored.baseUrl:
+            try:
+                return addServer(found.baseUrl, device, session=session, serverId=stored.serverId)
+            except SiloError:
+                return None
+    return None
 
 
 def removeServer(serverId):
@@ -80,10 +96,21 @@ def removeServer(serverId):
 
 
 def addServerDialog(device, session=None, address=''):
-    """Ask for a Silo server's address (pre-filled with address) until one answers or the user gives up: its
-    StoredServer, or None."""
+    """Ask for a Silo server until one answers or the user gives up: its StoredServer, or None. With no address to
+    start from, the servers found on the network come first (silonet.discovery), then the address box."""
+    found = [] if address else discovery.find()
     while True:
-        address = xbmcgui.Dialog().input(T(35247, 'Silo server address, for example http://192.168.1.10:8090'), address)
+        picked = None
+        if found:
+            labels = [f'{f.name} ({f.baseUrl})' for f in found] + [T(35307, 'Enter address')]
+            choice = xbmcgui.Dialog().select(T(35308, 'Silo servers on your network'), labels)
+            if choice < 0:
+                return None
+            picked = found[choice].baseUrl if choice < len(found) else None
+            found = []
+        address = picked or xbmcgui.Dialog().input(
+            T(35247, 'Silo server address, for example http://192.168.1.10:8090'), address
+        )
         if not address:
             return None
         try:
@@ -101,11 +128,13 @@ def addServerDialog(device, session=None, address=''):
             return None
 
 
-def signIn(client, address):
+def signIn(client, address, reachable=True):
     """The sign-in card until someone signs in: the session (auth.PollResult from an approved code, auth.Tokens from a
-    password), CHANGE when the user asked for another server address, or None when they gave up."""
+    password), CHANGE when the user asked for another server address, or None when they gave up. reachable=False: the
+    card only says it can't reach the server, with Change."""
     window = signin.PinLoginWindow.create()
-    window.setOptions(loginOptions(client), address, util.getSetting(USERNAME_SETTING, ''))
+    options = loginOptions(client) if reachable else LoginOptions(None, '', False)
+    window.setOptions(options, address, util.getSetting(USERNAME_SETTING, ''))
     session = []
 
     def signInWithPassword():
@@ -129,7 +158,14 @@ def signIn(client, address):
         return not (window.abort or window.change)
 
     try:
-        result = auth.signInWithCode(auth.DeviceLogin(client), client.device.name, window.setCode, wait)
+        if reachable:
+            result = auth.signInWithCode(auth.DeviceLogin(client), client.device.name, window.setCode, wait)
+        else:
+            window.showError(T(35248, 'Could not reach a Silo server at {address}.').format(address=address))
+            window.setFocusId(window.CHANGE_ID)
+            while wait(1):
+                pass
+            result = None
     finally:
         window.doClose()
 
@@ -208,6 +244,13 @@ def chooseProfile(account):
     )
 
 
+def changeAddress(stored, device, session=None):
+    """Change on the card: the address box pre-filled with the stored address, then start-up again. A new address is
+    stored last, which the restart picks; none keeps the card on this one."""
+    addServerDialog(device, session=session, address=stored.baseUrl)
+    return init(session)
+
+
 def init(session=None):
     """
     Get SM4K ready to open Home: a server (asked for on first run), a session (signed in with a code when there is
@@ -224,27 +267,32 @@ def init(session=None):
     client = SiloClient(stored.baseUrl, device, credentials, session=session)
     account = SiloAccount(client, user)
     while True:
-        if not credentials.accessToken:
-            result = signIn(client, stored.baseUrl)
-            if result == CHANGE:
-                # a new address is stored last, which the restart picks; none keeps the card on this one
-                addServerDialog(device, session=session, address=stored.baseUrl)
-                return init(session)
-            if result is None:
-                return False
-            user.clear()
-            user.update(result.user)
-            credentials.accessToken, credentials.refreshToken = result.accessToken, result.refreshToken
-            credentials.profileId, credentials.profileToken = result.profileId, result.profileToken
-            saveCredentials(stored.serverId, credentials, user)
-            account.isAuthenticated = bool(result.profileId)  # a session bound to one profile goes home as it
         try:
+            if not credentials.accessToken:
+                result = signIn(client, stored.baseUrl)
+                if result == CHANGE:
+                    return changeAddress(stored, device, session)
+                if result is None:
+                    return False
+                user.clear()
+                user.update(result.user)
+                credentials.accessToken, credentials.refreshToken = result.accessToken, result.refreshToken
+                credentials.profileId, credentials.profileToken = result.profileId, result.profileToken
+                saveCredentials(stored.serverId, credentials, user)
+                account.isAuthenticated = bool(result.profileId)  # a session bound to one profile goes home as it
             account.updateHomeUsers()
             break
         except SiloAuthError:
             util.DEBUG_LOG('Silo: the session ended, signing in again')
             credentials.accessToken = credentials.refreshToken = credentials.profileToken = None
             saveCredentials(stored.serverId, credentials, user)
+        except SiloUnavailable:
+            # a server whose address changed answers on the network under its ID; else the card says so, with Change
+            if relocate(stored, device, session=session):
+                return init(session)
+            if signIn(client, stored.baseUrl, reachable=False) == CHANGE:
+                return changeAddress(stored, device, session)
+            return False
         except SiloError:
             util.messageDialog(
                 T(32427, 'Failed'), T(35252, "Can't reach the Silo server. Check your connection and try again.")

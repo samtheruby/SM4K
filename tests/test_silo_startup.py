@@ -12,6 +12,7 @@ from kodienv import ENV
 from plexnet import plexapp
 from plexnet import util as pnUtil
 from silonet import auth
+from silonet.discovery import Found
 
 from lib import silo
 
@@ -75,7 +76,9 @@ class SiloStartupTest(KodiTestCase):
             mock.patch.object(plexapp, 'SERVERMANAGER', None),
             mock.patch.object(pnUtil, 'ACCOUNT', None, create=True),
             mock.patch.object(pnUtil, 'SERVERMANAGER', None, create=True),
+            mock.patch.object(silo.discovery, 'find', side_effect=lambda: self.found),
         ]
+        self.found = []
         for p in self.patches:
             p.start()
             self.addCleanup(p.stop)
@@ -158,17 +161,44 @@ class SiloStartupTest(KodiTestCase):
 
         self.assertFalse(silo.init(session=FakeSession()))
 
-    def test_unreachable_server_says_so(self):
+    def test_unreachable_server_shows_the_card_with_change(self):
         ENV.settings[silo.SERVERS_SETTING] = json.dumps([STORED])
-        ENV.settings[silo.CREDENTIALS_SETTING] = json.dumps(
-            {'server_id': 'srv-1', 'access_token': 'A1', 'refresh_token': 'R1', 'profile_id': 'p1'}
-        )
+        ENV.settings[silo.CREDENTIALS_SETTING] = json.dumps(STORED_SESSION)
         import requests
 
-        with mock.patch.object(silo.util, 'messageDialog') as dialog:
+        with mock.patch.object(silo, 'signIn', return_value=None) as signIn:
             self.assertFalse(silo.init(session=FakeSession(requests.ConnectionError('down'))))
 
-        self.assertIn('Silo server', dialog.call_args[0][1])
+        self.assertEqual(signIn.call_args[0][1:], ('http://silo.lan:8090',))
+        self.assertEqual(signIn.call_args[1], {'reachable': False})
+
+    def test_a_moved_server_is_found_again(self):
+        ENV.settings[silo.SERVERS_SETTING] = json.dumps([STORED])
+        ENV.settings[silo.CREDENTIALS_SETTING] = json.dumps(STORED_SESSION)
+        self.found = [Found('Silo', 'http://silo.lan:8091', 'srv-1')]
+        import requests
+
+        session = FakeSession(requests.ConnectionError('down'), *probeAnswers(), PROFILES)
+        with mock.patch.object(silo, 'signIn') as signIn:
+            self.assertTrue(silo.init(session=session))
+
+        signIn.assert_not_called()  # the stored session goes on at the new address
+        self.assertEqual([s.baseUrl for s in silo.storedServers()], ['http://silo.lan:8091'])
+        self.assertEqual(session.calls[-1]['url'], 'http://silo.lan:8091/api/v2/profiles')
+
+    def test_another_server_claiming_the_id_is_not_taken(self):
+        ENV.settings[silo.SERVERS_SETTING] = json.dumps([STORED])
+        ENV.settings[silo.CREDENTIALS_SETTING] = json.dumps(STORED_SESSION)
+        self.found = [Found('Silo', 'http://silo.lan:8091', 'srv-1')]
+        answers = probeAnswers()
+        answers[1] = FakeResponse(200, {'server_id': 'srv-9'})  # its identity says otherwise
+        import requests
+
+        with mock.patch.object(silo, 'signIn', return_value=None) as signIn:
+            self.assertFalse(silo.init(session=FakeSession(requests.ConnectionError('down'), *answers)))
+
+        self.assertEqual(signIn.call_args[1], {'reachable': False})
+        self.assertEqual([s.baseUrl for s in silo.storedServers()], ['http://silo.lan:8090'])
 
     def signInWith(self, result, *answers):
         ENV.settings[silo.SERVERS_SETTING] = json.dumps([STORED])
