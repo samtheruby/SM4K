@@ -18,12 +18,15 @@ from silonet.servermanager import SiloServerManager
 
 from . import util
 from .util import T
-from .windows import signin
+from .windows import optionsdialog, signin
+from .windows.dialog import showOptionsDialog
 
 SERVERS_SETTING = 'silo_servers_json'
 CREDENTIALS_SETTING = 'silo_credentials_json'
 USERNAME_SETTING = 'silo_username'  # the last username signed in with; never the password
 CHANGE = 'change'  # signIn(): the user asked for another server address
+ADD_SERVER = 'add'  # pickServer()'s Add server row
+ENTER_ADDRESS = 'enter'  # addServerDialog()'s Enter address row
 
 # how often a wait checks for Back while it sleeps
 WAIT_STEP = 0.1
@@ -101,38 +104,49 @@ def useServer(serverId):
     saveServers([s for s in servers if s.serverId != serverId] + [s for s in servers if s.serverId == serverId])
 
 
-def pickServer(device, session=None):
+def pickServer(device, session=None, dialog_props=None):
     """
-    The user menu's Switch server: the stored servers, the one in use selected, then Add server. The ID of the server
-    in use when the user picked or added another one, which start-up then opens (initAfterSwitch()); else None.
+    The user menu's Switch server, in SiloMod's picker: the stored servers, the one in use ticked, then Add server. The
+    ID of the server in use when the user picked or added another one, which start-up then opens (initAfterSwitch());
+    else None.
     """
     servers = storedServers()
     current = servers[-1].serverId if servers else None
-    labels = [f'{s.name or s.baseUrl} ({s.baseUrl})' for s in servers] + [T(35312, 'Add server')]
-    choice = xbmcgui.Dialog().select(T(35311, 'Switch server'), labels, preselect=len(servers) - 1)
-    if choice < 0:
+    options = [(s.serverId, f'{s.name or s.baseUrl} ({s.baseUrl})') for s in servers]
+    choice = showOptionsDialog(
+        T(35311, 'Switch server'),
+        options + [(ADD_SERVER, T(35312, 'Add server'))],
+        non_playback=True,
+        selected_idx=len(servers) - 1 if servers else None,
+        dialog_props=dialog_props,
+    )
+    if choice is None or choice == current:
         return None
-    if choice < len(servers):
-        if servers[choice].serverId == current:
-            return None
-        useServer(servers[choice].serverId)
+    if choice != ADD_SERVER:
+        useServer(choice)
         return current
-    added = addServerDialog(device, session=session)
+    added = addServerDialog(device, session=session, dialog_props=dialog_props)
     return current if added is not None and added.serverId != current else None
 
 
-def addServerDialog(device, session=None, address=''):
+def addServerDialog(device, session=None, address='', dialog_props=None):
     """Ask for a Silo server until one answers or the user gives up: its StoredServer, or None. With no address to
-    start from, the servers found on the network come first (silonet.discovery), then the address box."""
+    start from, the servers found on the network come first (silonet.discovery, in SiloMod's picker), then the address
+    box."""
     found = [] if address else discovery.find()
     while True:
         picked = None
         if found:
-            labels = [f'{f.name} ({f.baseUrl})' for f in found] + [T(35307, 'Enter address')]
-            choice = xbmcgui.Dialog().select(T(35308, 'Silo servers on your network'), labels)
-            if choice < 0:
+            options = [(f.baseUrl, f'{f.name} ({f.baseUrl})') for f in found]
+            choice = showOptionsDialog(
+                T(35308, 'Silo servers on your network'),
+                options + [(ENTER_ADDRESS, T(35307, 'Enter address'))],
+                non_playback=True,
+                dialog_props=dialog_props,
+            )
+            if choice is None:
                 return None
-            picked = found[choice].baseUrl if choice < len(found) else None
+            picked = None if choice == ENTER_ADDRESS else choice
             found = []
         address = picked or xbmcgui.Dialog().input(
             T(35247, 'Silo server address, for example http://192.168.1.10:8090'), address
@@ -145,12 +159,14 @@ def addServerDialog(device, session=None, address=''):
             message = T(35248, 'Could not reach a Silo server at {address}.')
         except SiloIncompatible:
             message = T(35249, '{address} is not a Silo server SiloMod can use.')
-        if not xbmcgui.Dialog().yesno(
+        retry = optionsdialog.show(
             T(32427, 'Failed'),
             message.format(address=address),
-            nolabel=T(32337, 'Cancel'),
-            yeslabel=T(35032, 'Try again'),
-        ):
+            T(35032, 'Try again'),
+            T(32337, 'Cancel'),
+            dialog_props=dialog_props,
+        )
+        if retry != 0:
             return None
 
 
