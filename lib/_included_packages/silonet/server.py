@@ -37,6 +37,8 @@ SECTION_TYPES = {'movies': 'movie', 'series': 'show', 'mixed': 'movie'}
 LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter|filters|genre|contentRating)$')
 # an item's detail (PlexObject.reload())
 METADATA_PATH = re.compile(r'^/library/metadata/([^/]+)$')
+# pre-play's Refresh metadata (an admin's): Silo refreshes the item's metadata itself
+REFRESH_PATH = re.compile(r'^/library/metadata/([^/]+)/refresh$')
 # a show's seasons or a season's episodes (their key), and a show's every episode (Show.episodes())
 CHILDREN_PATH = re.compile(r'^/library/metadata/([^/]+)/(children|allLeaves)$')
 # an episode tile's season, by number (silonet.items)
@@ -65,6 +67,7 @@ class SiloServer(SignalsMixin):
     suspect = False
     gone = False
     owned = True
+    allowsMediaDeletion = False  # no deleting through Silo (pre-play's More menu reads it)
     platform = 'silo'
     pendingReachabilityRequests = 0  # Plex's connection tests; a Silo server has one address
     # What Plex Uno's media decision engine asks a server (plexnet mediadecisionengine.py). Silo decides each attempt
@@ -141,6 +144,11 @@ class SiloServer(SignalsMixin):
                 kwargs.get('offset'),
                 kwargs.get('limit'),
                 self._libraryTypes.get(libraryPath.group(1), ''),
+            )
+        refreshPath = REFRESH_PATH.match(route) if handler is None else None
+        if refreshPath:
+            handler = functools.partial(
+                self.client.request, 'POST', f'/api/v2/admin/items/{refreshPath.group(1)}/refresh-metadata'
             )
         metadataPath = METADATA_PATH.match(route) if handler is None else None
         if metadataPath:
