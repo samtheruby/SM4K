@@ -502,7 +502,6 @@ class EpisodesWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutil
     RELATED_LIST_ID = 404
 
     OPTIONS_GROUP_ID = 200
-    PLAYER_STATUS_BUTTON_ID = 204
 
     MAIN_BUTTON_GROUP_ID = 300
     PLAY_BUTTON_ID = 301
@@ -1671,8 +1670,6 @@ class EpisodesWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutil
             self.sectionClicked()
         elif controlID == self.EPISODE_LIST_ID:
             self.episodeListClicked()
-        elif controlID == self.PLAYER_STATUS_BUTTON_ID:
-            self.showAudioPlayer()
         elif controlID == self.PLAY_BUTTON_ID:
             self.playButtonClicked()
         elif controlID == self.RESUME_BUTTON_ID:

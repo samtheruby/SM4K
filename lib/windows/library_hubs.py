@@ -5,7 +5,6 @@ import json
 import time
 
 import plexnet
-from kodi_six import xbmc
 from kodi_six import xbmcgui
 from plexnet import plexapp
 from six.moves import range
@@ -1654,10 +1653,6 @@ class HubsMixin(object):
                 if self.tabList and self.section.TYPE != 'mixed':
                     self.setFocusId(self.TAB_LIST_ID)
                     return True
-                elif xbmc.getCondVisibility(
-                        'Player.HasAudio + String.IsEmpty(Window(10000).Property(script.plex.theme_playing))'):
-                    self.setFocusId(self.PLAYER_STATUS_BUTTON_ID)
-                    return True
             self._startHubSlide(-1 if action_id == xbmcgui.ACTION_MOVE_UP else 1)
             return True
         elif action_id in (xbmcgui.ACTION_MOVE_LEFT, xbmcgui.ACTION_MOVE_RIGHT):
@@ -1709,8 +1704,6 @@ class HubsMixin(object):
             self.tabListClicked()
         elif 399 < controlID < 500:
             self.hubItemClicked(controlID)
-        elif controlID == self.PLAYER_STATUS_BUTTON_ID:
-            self.showAudioPlayer()
 
     def hubFocus(self, controlID):
         """The Recommended view's own focus handling: every focus event the host's routeFocus()

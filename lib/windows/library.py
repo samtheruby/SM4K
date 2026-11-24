@@ -4048,7 +4048,6 @@ class PostersWindow(kodigui.MultiWindowView, kodigui.ControlledWindow, windowuti
 
     OPTIONS_GROUP_ID = 200
 
-    PLAYER_STATUS_BUTTON_ID = 204
 
     SORT_BUTTON_ID = 210
     FILTER1_BUTTON_ID = 211
@@ -4166,7 +4165,6 @@ class RecommendedWindow(kodigui.MultiWindowView, kodigui.ControlledWindow, windo
     height = 1080
 
     # The now-playing widget (shown while music plays) and the first hub row.
-    PLAYER_STATUS_BUTTON_ID = 204
     HUB_CONTROL_ID = 400
 
     MULTI_WINDOW_ID = 0

@@ -369,7 +369,6 @@ class PersonWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils.
     POSTER_DIM = util.scaleResolution(240, 360)
 
     FILMOGRAPHY_LIST_ID = 400
-    PLAYER_STATUS_BUTTON_ID = 204
     FILTER_BUTTON_ID = 300
     FILMOGRAPHY_BUTTON_ID = 302
     # the click target over the bio, opening the whole of it (pre-play's SUMMARY_BUTTON_ID recipe)
@@ -499,8 +498,6 @@ class PersonWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils.
             self.summaryButtonClicked()
         elif controlID == self.FILMOGRAPHY_LIST_ID:
             self.filmographyItemClicked()
-        elif controlID == self.PLAYER_STATUS_BUTTON_ID:
-            self.showAudioPlayer()
 
     def onFocus(self, controlID):
         # Not live on its host yet, or any more (kodigui.BaseWindow.ignoresInput()).
