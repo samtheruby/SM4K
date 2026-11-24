@@ -168,6 +168,36 @@ class PartyReportsTest(KodiTestCase):
         self.assertTrue(p.link.sent[0]['is_ready'])
         self.assertEqual(p.link.sent[0]['command_id'], 'c8')
 
+    def test_a_host_short_of_the_seek_is_ready_where_it_landed(self):
+        # Kodi lands a seek on a keyframe, here 1.9 s short: Silo accepts the host within 15 s and re-anchors to it
+        p = party(
+            player=FakePlayer('movie-tmdb-238', position=598.1, paused=True),
+            attached_session_id='sess-1',
+            playback_state='waiting',
+            self_role='host',
+        )
+        p.onMessage(command('seek', 600.0, state='waiting', cid='c9'))
+        p.player.at = 598.1  # where the seek really landed
+        p.link.sent.clear()
+
+        p.tick()
+
+        self.assertTrue(p.link.sent[0]['is_ready'])
+
+    def test_a_guest_short_of_the_seek_is_not_ready_yet(self):
+        p = party(
+            player=FakePlayer('movie-tmdb-238', position=598.1, paused=True),
+            attached_session_id='sess-1',
+            playback_state='waiting',
+        )
+        p.onMessage(command('seek', 600.0, state='waiting', cid='c9'))
+        p.player.at = 598.1
+        p.link.sent.clear()
+
+        p.tick()
+
+        self.assertNotIn('is_ready', p.link.sent[0])
+
     def test_no_reports_without_the_rooms_item(self):
         p = party(player=FakePlayer(None))
 

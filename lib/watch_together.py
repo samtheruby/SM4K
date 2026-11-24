@@ -21,6 +21,9 @@ from lib.i18n import T
 
 ECHO = 1.5  # seconds after a command runs in which the player's own events are its, not the user's
 IN_STEP = 1.0  # seconds from the room within which a command doesn't seek
+# how far from a seek's destination Silo accepts readiness: a guest's within a second, the host's within fifteen (Kodi
+# lands a seek on a keyframe, and Silo re-anchors the room where the host really is: docs/realtime-api.md)
+READY_BAND, HOST_READY_BAND = 1.0, 15.0
 REPORT_EVERY, READY_EVERY = 1.5, 0.5  # seconds
 
 # the party this add-on is in, if any (one at a time)
@@ -140,7 +143,7 @@ class Party:
                 self.snapshot.get('playback_state') == 'waiting'
                 and not self._selfReady()
                 and self.lastTarget is not None
-                and abs(position - self.lastTarget) <= IN_STEP
+                and abs(position - self.lastTarget) <= (HOST_READY_BAND if self.isHost else READY_BAND)
             ):
                 report['is_ready'] = True
         self.link.send(report)
