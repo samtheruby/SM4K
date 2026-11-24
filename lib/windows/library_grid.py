@@ -129,6 +129,15 @@ TYPE_PLURAL = {
     'movies_shows': T(34002, "Movies & Shows"),
 }
 
+
+def typePlural(section, itemType):
+    """What the grid lists, as its count and type picker name it: a Silo mixed library's films are "Movies & Shows"
+    (silonet lists it as a film library, mixed="1")."""
+    key = itemType or section.TYPE
+    if key == 'movie' and section.get('mixed').asBool():
+        key = 'movies_shows'
+    return TYPE_PLURAL.get(key, section.TYPE)
+
 SORT_KEYS = {
     'movie': {
         'titleSort': {'title': T(32357, 'By Title'), 'display': T(32358, 'Title'), 'defSortDesc': False},
@@ -830,7 +839,7 @@ class GridMixin(object):
             for t in ('show', 'episode'):
                 options.append({'type': t, 'display': TYPE_PLURAL.get(t, t)})
         elif self.section.TYPE == 'movie':
-            options.append({'type': 'movie', 'display': TYPE_PLURAL.get('movie', 'movie')})
+            options.append({'type': 'movie', 'display': typePlural(self.section, 'movie')})
             options.append({'type': 'folder', 'display': TYPE_PLURAL.get('folder', 'folder')})
         elif self.section.TYPE == 'artist':
             for t in ('artist', 'album', 'track'):
@@ -933,7 +942,7 @@ class GridMixin(object):
             # it they stayed hidden after Folders -> Films until the screen was opened again (the
             # user, 2026-10-09)
             self.setProperty('media.itemType', self.itemType or self.section.TYPE)
-            self.setProperty('media.type', TYPE_PLURAL.get(self.itemType or self.section.TYPE, self.section.TYPE))
+            self.setProperty('media.type', typePlural(self.section, self.itemType))
             display = self.sortDisplay()
             if display is None:
                 # stored sort isn't valid for this item type

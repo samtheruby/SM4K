@@ -6,13 +6,15 @@ Plex-shaped XML; and SiloServerManager holds the Silo servers the way plexapp.SE
 from unittest import mock
 
 from kodienv import ENV
+
+ENV.abort_requested = True  # importing lib.windows.* starts lib.player's monitor thread otherwise
 from plexnet import plexlibrary
 from silonet.client import Credentials, DeviceIdentity, SiloClient
 from silonet.server import SiloServer
 from silonet.servermanager import SiloServerManager
 
 from lib.silo import StoredServer
-from lib.windows import home, section_ids, sidebar_model
+from lib.windows import home, library_grid, section_ids, sidebar_model
 
 from .base import KodiTestCase
 from .silonet_fakes import FakeResponse, FakeSession
@@ -67,10 +69,15 @@ class SiloServerTest(KodiTestCase):
         session = FakeSession(LIBRARIES, FakeResponse(200, cards))
         srv = server(session)
 
-        mixed = [s for s in plexlibrary.Library(None, server=srv).sections() if s.key == 'lib-x'][0]
+        sections = {s.key: s for s in plexlibrary.Library(None, server=srv).sections()}
         grid = srv.query('/library/sections/lib-x/all', offset=0, limit=50)
 
+        mixed = sections['lib-x']
         self.assertEqual(mixed.TYPE, 'movie')
+        self.assertTrue(mixed.get('mixed').asBool())
+        # its count and type picker say "Movies & Shows", not "Movies"
+        self.assertEqual(library_grid.typePlural(mixed, None), 'Movies & Shows')
+        self.assertEqual(library_grid.typePlural(sections['lib-m'], None), 'Movies')
         self.assertEqual(session.calls[1]['params']['library_id'], 'lib-x')
         self.assertEqual(
             [(e.get('type'), e.get('title')) for e in grid], [('movie', 'Dune'), ('show', 'The Crocodile Hunter')]

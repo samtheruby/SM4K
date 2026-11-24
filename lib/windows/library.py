@@ -38,7 +38,7 @@ from . import section_ids
 from . import sidebar_model
 from . import navintent
 from . import windowutils
-from .library_grid import GridMixin, TYPE_PLURAL, isOtherVideos
+from .library_grid import GridMixin, isOtherVideos, typePlural
 from .library_hubs import HubsMixin
 from .mixins.playbackbtn import PlaybackBtnMixin
 from .mixins.common import CommonMixin
@@ -2837,7 +2837,7 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             self.setProperty('sort.display', display)
             self.updateSortIcon()
         self.setProperty('media.itemType', self.itemType or self.section.TYPE)
-        self.setProperty('media.type', TYPE_PLURAL.get(self.itemType or self.section.TYPE, self.section.TYPE))
+        self.setProperty('media.type', typePlural(self.section, self.itemType))
         self.setProperty('media', self.section.TYPE)
         self.setProperty('hide.filteroptions', hideFilterOptions and '1' or '')
         # Library grid screens never want the sharp top-right hero-art box
