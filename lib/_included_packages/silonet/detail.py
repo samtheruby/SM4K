@@ -26,6 +26,22 @@ def flag(value):
     return '1' if value else '0'
 
 
+def languageAttrs(code):
+    """A track's language as Plex names it, what Uno's language names and preferences read: languageCode in ISO
+    639-2/B ('eng', 'fre', 'chi'; ISO 639-3 where there's none, 'yue') and language, the English name. Silo's code is
+    ISO 639-1 ('en'), a BCP 47 tag ('zh-Hans') or ISO 639-3 ('yue'); one iso639 doesn't know stays as it is."""
+    if not code:
+        return {}
+    base = code.strip().lower().replace('_', '-').split('-')[0]
+    try:
+        from iso639 import languages
+
+        language = languages.get(part1=base) if len(base) == 2 else languages.get(part3=base)
+    except (ImportError, KeyError):
+        return {'languageCode': base, 'language': code}
+    return {'languageCode': language.part2b or language.part3 or base, 'language': language.name}
+
+
 def ratingElements(detail):
     """Silo's ratings as Plex <Rating>s (RatingsMixin.populateRatings()): IMDb, Rotten Tomatoes critic and audience
     (percentages as x/10, fresh from 60), TMDB."""
@@ -118,6 +134,12 @@ def mediaElement(version):
                 'bitDepth': v.get('bit_depth'),
                 'frameRate': v.get('frame_rate'),
                 'DOVIPresent': flag(v.get('dolby_vision')),
+                'DOVIProfile': v.get('dv_profile'),
+                'DOVILevel': v.get('dv_level'),
+                'DOVIBLCompatID': v.get('dv_bl_compat_id'),
+                'colorTrc': v.get('color_transfer'),
+                'colorPrimaries': v.get('color_primaries'),
+                'colorSpace': v.get('color_space'),
             },
         )
         for n, v in enumerate(videoTracks)
@@ -132,7 +154,7 @@ def mediaElement(version):
                 'index': n,
                 'codec': a.get('codec'),
                 'channels': a.get('channels'),
-                'languageCode': a.get('language'),
+                **languageAttrs(a.get('language')),
                 'title': a.get('title'),
                 'displayTitle': a.get('title'),
                 'default': flag(a.get('default')),
@@ -149,7 +171,7 @@ def mediaElement(version):
                 'id': f'{fileId}.s{s.get("index")}',
                 'index': s.get('index'),
                 'codec': s.get('codec'),
-                'languageCode': s.get('language'),
+                **languageAttrs(s.get('language')),
                 'title': s.get('title'),
                 'displayTitle': s.get('title'),
                 'forced': flag(s.get('forced')),

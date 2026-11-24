@@ -74,6 +74,11 @@ MOVIE = {
                     'frame_rate': '23.976',
                     'bit_depth': 10,
                     'dolby_vision': 'Profile 8',
+                    'dv_profile': 8,
+                    'dv_level': 6,
+                    'dv_bl_compat_id': 1,
+                    'color_transfer': 'smpte2084',
+                    'color_primaries': 'bt2020',
                     'video_range': 'DolbyVision',
                 }
             ],
@@ -207,3 +212,44 @@ class SiloMovieDetailTest(KodiTestCase):
         movie = tile(server(session), MOVIE).reload()
 
         self.assertTrue(movie.reloadFailed)
+
+
+class SiloStreamDetailTest(KodiTestCase):
+    """What the pre-play badges read of a version's tracks: the language name of each track (Plex's ISO 639-2/B
+    languageCode and English name, from Silo's 'en', 'zh-Hans' or 'yue') and the video's HDR / Dolby Vision."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+
+    def part(self, detail=MOVIE):
+        movie = tile(server(FakeSession(FakeResponse(200, detail))), detail).reload()
+        return movie.media[0].parts[0]
+
+    def test_track_languages_as_plex_names_them(self):
+        streams = self.part().streams
+        audio = [s for s in streams if s.streamType.asInt() == 2]
+        subtitles = [s for s in streams if s.streamType.asInt() == 3]
+
+        self.assertEqual([(a.languageCode, a.getLanguageName()) for a in audio], [('eng', 'English')] * 2)
+        self.assertEqual(
+            [(s.languageCode, s.getLanguageName()) for s in subtitles], [('eng', 'English'), ('fre', 'French')]
+        )
+
+    def test_regional_and_three_letter_codes(self):
+        import copy
+
+        detail = copy.deepcopy(MOVIE)
+        detail['versions'][0]['subtitle_tracks'] = [
+            {'index': 9, 'language': 'zh-Hans', 'codec': 'subrip', 'title': 'Chinese (Simplified)'},
+            {'index': 8, 'language': 'yue', 'codec': 'subrip', 'title': 'Cantonese'},
+        ]
+
+        subtitles = [s for s in self.part(detail).streams if s.streamType.asInt() == 3]
+
+        self.assertEqual([s.languageCode for s in subtitles], ['chi', 'yue'])
+
+    def test_dolby_vision_and_hdr_render(self):
+        stream = next(s for s in self.part().streams if s.streamType.asInt() == 1)
+
+        self.assertEqual(stream.videoCodecRendering, 'DV P8.1/HDR')
