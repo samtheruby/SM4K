@@ -15,6 +15,7 @@ from kodi_six import xbmcgui
 from six.moves import range
 from six.moves import zip
 
+from .. import properties_core
 from .. import util
 from .. import panel_texture
 from .. import update_restart
@@ -2595,14 +2596,14 @@ class GlobalProperty():
         self.prop = prop
         self.val = val
         self.end = end
-        self.old = xbmc.getInfoLabel('Window(10000).Property(script.plex.{})'.format(prop))
+        self.old = xbmc.getInfoLabel('Window(10000).Property({})'.format(properties_core.BASE.format(prop)))
 
     def __enter__(self):
-        xbmcgui.Window(10000).setProperty('script.plex.{}'.format(self.prop), self.val)
+        xbmcgui.Window(10000).setProperty(properties_core.BASE.format(self.prop), self.val)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        xbmcgui.Window(10000).setProperty('script.plex.{}'.format(self.prop), self.end or self.old)
+        xbmcgui.Window(10000).setProperty(properties_core.BASE.format(self.prop), self.end or self.old)
 
 
 # BackgroundWindow's (background.py): the window the whole session runs in, and what Kodi should
