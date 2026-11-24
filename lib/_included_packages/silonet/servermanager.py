@@ -32,6 +32,10 @@ class SiloServerManager(signalsmixin.SignalsMixin):
     def getDiscoverServer(self):
         return None  # plex.tv's Discover; Silo has none
 
+    def getWatchlistServer(self):
+        """The server whose watchlist the Watchlist screen and buttons use (decision D18): the selected one."""
+        return self.selectedServer
+
     def periodicReachabilityCheck(self, *args, **kwargs):
         pass
 

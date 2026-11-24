@@ -103,6 +103,7 @@ class SiloServerOnHomeTest(KodiTestCase):
                 200, {'sections': [{'id': 's2', 'section_type': 'recently_added', 'title': 'Recently Added'}]}
             ),
             FakeResponse(200, {'items': [{'content_id': 'm1', 'type': 'movie', 'title': 'Dune'}], 'has_more': False}),
+            FakeResponse(200, {'items': []}),  # no favorites
         )
 
         home.HomeHubsTask().setup(

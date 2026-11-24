@@ -11,7 +11,21 @@ from xml.etree import ElementTree
 
 from plexnet.signalsmixin import SignalsMixin
 
-from . import detail, home, library, people, playback, related, search, shows, trackprefs, trickplay, watch, watchstate
+from . import (
+    detail,
+    home,
+    library,
+    lists,
+    people,
+    playback,
+    related,
+    search,
+    shows,
+    trackprefs,
+    trickplay,
+    watch,
+    watchstate,
+)
 from .client import log
 from .errors import SiloError
 from .items import container
@@ -30,6 +44,8 @@ SEASON_PATH = re.compile(r'^/library/metadata/([^/]+)/season/(\d+)$')
 SIMILAR_PATH = re.compile(r'^/library/metadata/([^/]+)/similar$')
 # a person, and their titles in the libraries (Role.getDetails(), lib/windows/person.py libraryFilmography())
 PEOPLE_PATH = re.compile(r'^/library/people/([^/]+)(/media)?$')
+# an item's watchlist state (the watchlist code's is_watchlisted(): Discover's path)
+USERSTATE_PATH = re.compile(r'^/library/metadata/([^/]+)/userState$')
 # a subtitle file's stream key (silonet.detail), resolved by buildUrl() from the playing attempt's plan
 SUBTITLE_KEY = '/silo/subtitles/'
 # a collection's titles (plexlibrary.Collection.all(): its key)
@@ -89,6 +105,17 @@ class SiloServer(SignalsMixin):
         handler = self._routes.get(route)
         if handler is None and route in watchstate.ROUTES:
             handler = functools.partial(watchstate.change, self.client, route, dict(parse_qsl(queryString)))
+        if handler is None and route in lists.ACTIONS and kwargs.get('ratingKey'):
+            handler = functools.partial(
+                lists.change, self.client, lists.WATCHLIST, kwargs['ratingKey'], lists.ACTIONS[route]
+            )
+        if handler is None and route == '/library/sections/watchlist/all':
+            handler = functools.partial(
+                lists.items, self.client, lists.WATCHLIST, kwargs.get('offset'), kwargs.get('limit')
+            )
+        userState = USERSTATE_PATH.match(route) if handler is None else None
+        if userState:
+            handler = functools.partial(lists.userState, self.client, userState.group(1))
         if handler is None and route.startswith(home.ROW_PATH):
             handler = functools.partial(self._row, route, kwargs.get('offset'), kwargs.get('limit'))
         libraryPath = LIBRARY_PATH.match(route) if handler is None else None
@@ -164,7 +191,10 @@ class SiloServer(SignalsMixin):
             libraryId, _, sectionId = route[len(library.LIBRARY_ROW_PATH) :].partition('/')
             items = library.libraryRowItems(self.client, libraryId, sectionId)
         else:
-            items = home.rowItems(self.client, route[len(home.ROW_PATH) :], self.homeCapabilities())
+            rowId = route[len(home.ROW_PATH) :]
+            items = lists.rowItems(self.client, rowId)
+            if items is None:
+                items = home.rowItems(self.client, rowId, self.homeCapabilities())
         start = offset or 0
         page = [] if limit == 0 else items[start : None if limit is None else start + limit]
         root = container(page)
@@ -266,6 +296,13 @@ class SiloServer(SignalsMixin):
             return response.content
 
         return trickplay.SheetIndex(manifest or {}, self.client.baseUrl, fetch)
+
+    def isFavorite(self, item):
+        """Whether the item is one of the profile's favorites (decision D19); None when Silo can't say."""
+        return lists.isMember(self.client, lists.FAVORITES, item.ratingKey)
+
+    def setFavorite(self, item, add):
+        lists.change(self.client, lists.FAVORITES, item.ratingKey, add)
 
     def themeUrl(self, item):
         """The item's theme song (decision D15) as a short-lived URL (POST .../themes/{id}/playback), or None: no
@@ -392,13 +429,21 @@ class SiloServer(SignalsMixin):
         library, so section_ids doesn't narrow them (D8)."""
         from plexnet import plexlibrary, plexobjects, video  # noqa: F401 (video registers the item types)
 
+        from lib.i18n import T
+
         try:
             if search_query:
                 rows = search.searchHubs(self.client, search_query, count)
+            elif section == lists.WATCHLIST_SECTION:
+                titles = {'movie': T(32348, 'Movies'), 'series': T(32350, 'Shows')}
+                rows = lists.watchlistRows(self.client, count, titles)
             elif section:
                 rows = library.libraryRows(self.client, section, count)
             else:
                 rows = home.homeRows(self.client, count, continue_watching_count, self.homeCapabilities())
+                favorites = lists.favoritesRow(self.client, count, T(35259, 'Favorites'))
+                if favorites is not None:
+                    rows.append(favorites)
         except SiloError as e:
             log(f'{"library" if section else "home"} rows failed: {e.status} {e.type}')
             return []

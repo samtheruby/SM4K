@@ -1366,8 +1366,9 @@ class GridMixin(object):
 
         extra_kwargs = {}
 
-        # watchlist
-        if sectionType == 'movies_shows':
+        # watchlist: Discover's items, found again in a library; a Silo watchlist's are library items already
+        discoverWatchlist = sectionType == 'movies_shows' and getattr(self.section.server, 'platform', None) != 'silo'
+        if discoverWatchlist:
             extra_kwargs['from_watchlist'] = True
             extra_kwargs['directly_from_watchlist'] = True
             extra_kwargs['external_item'] = True
@@ -1424,7 +1425,7 @@ class GridMixin(object):
                 # ManagedControlList data reads, not native-control reads, and self.showPanelControl
                 # lives on this outer, persistent LibraryWindow instance (never torn down when
                 # hosting a shell - only self._current, the native window, is).
-                self.openWindow(preplay.PrePlayWindow if not sectionType == 'movies_shows' else preplay.PrePlayWindowWL,
+                self.openWindow(preplay.PrePlayWindowWL if discoverWatchlist else preplay.PrePlayWindow,
                                  video=datasource, parent_list=self.showPanelControl, **extra_kwargs)
         elif self.section.TYPE in ('photo', 'photodirectory'):
             self.showPhoto(mli.dataSource)

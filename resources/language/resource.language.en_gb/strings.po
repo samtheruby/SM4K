@@ -4148,3 +4148,15 @@ msgstr ""
 msgctxt "#35256"
 msgid "Skipping preview"
 msgstr ""
+
+msgctxt "#35257"
+msgid "Add to Favorites"
+msgstr ""
+
+msgctxt "#35258"
+msgid "Remove from Favorites"
+msgstr ""
+
+msgctxt "#35259"
+msgid "Favorites"
+msgstr ""

@@ -36,6 +36,8 @@ def itemElement(item):
     # a detail's, a season's or an episode's watch state (WatchRollup); a grid's is in user_state
     progress = item.get('user_data') or {}
     attrs = {'ratingKey': contentId, 'key': '/library/metadata/' + contentId, 'title': item.get('title') or ''}
+    # what Plex Uno's watchlist code names an item by (its guid's last part: lib/windows/mixins/watchlist.py)
+    attrs['guid'] = f'silo://{kind}/{contentId}'
     setIf(attrs, 'year', item.get('year'))
     setIf(attrs, 'thumb', item.get('poster_url'))
     setIf(attrs, 'art', item.get('backdrop_url'))
