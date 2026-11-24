@@ -230,8 +230,10 @@ class PartyLocalActionsTest(KodiTestCase):
             p.link.sent, [{'type': 'transport_request', 'action': 'pause', 'position_seconds': 42.0, 'is_paused': True}]
         )
 
-    def test_a_seek_here_asks_the_room(self):
-        p = party(player=FakePlayer('movie-tmdb-238', position=600.0), self_can_control_transport=True)
+    def test_the_hosts_seek_asks_the_room(self):
+        p = party(
+            player=FakePlayer('movie-tmdb-238', position=600.0), self_role='host', self_can_control_transport=True
+        )
 
         p.onLocalSeek(600.0)
 
@@ -343,6 +345,176 @@ class PartyConvergesTest(KodiTestCase):
         p.onMessage(command('play', 100.0, at=at(1000)))
 
         self.assertEqual([m for m in p.link.sent if m['type'] == 'transport_request'], sent)
+
+
+LOBBY = {
+    'room_id': 'r1',
+    'code': 'ABCD',
+    'phase': 'lobby',
+    'playback_state': 'idle',
+    'selection_revision': 1,
+    'selected_content_id': 'movie-tmdb-238',
+    'selected_file_id': 4711,
+    'guest_control_policy': 'host_only',
+    'generation': 3,
+    'members': [
+        {'display_name': 'Claude', 'is_host': True, 'is_self': True, 'lobby_ready': False},
+        {'display_name': 'Sam', 'is_host': False, 'is_self': False, 'lobby_ready': True},
+        {'display_name': 'Alex', 'is_host': False, 'is_self': False, 'lobby_ready': False},
+    ],
+}
+GUEST_LOBBY = dict(
+    LOBBY,
+    members=[
+        {'display_name': 'Claude', 'is_host': True, 'is_self': False, 'lobby_ready': False},
+        {'display_name': 'Sam', 'is_host': False, 'is_self': True, 'lobby_ready': False},
+    ],
+)
+
+
+class FakeRoom:
+    def __init__(self, party):
+        self.party, self.calls = party, []
+
+    def start(self, client):
+        self.calls.append('start')
+        self.snapshot = dict(self.party.snapshot, phase='playing', playback_state='waiting', generation=9)
+
+    def stop(self, client):
+        self.calls.append('stop')
+        self.snapshot = dict(self.party.snapshot, phase='lobby', playback_state='idle', generation=10)
+
+    def setGuestControl(self, client, allowed):
+        self.calls.append(('guests', allowed))
+        policy = 'guest_play_pause' if allowed else 'host_only'
+        self.snapshot = dict(self.party.snapshot, guest_control_policy=policy, generation=9)
+
+
+class FakeSession:
+    def __init__(self, snapshot, role):
+        self.party = party(dict(snapshot, self_role=role))
+        self.party.titleSource = lambda contentId: {'movie-tmdb-238': 'The Godfather'}.get(contentId, '')
+        self.room = FakeRoom(self.party)
+        self.server = type('Server', (), {'client': None, 'pinnedFiles': {}, 'getObject': lambda s, key: key})()
+        self.left = False
+
+    @property
+    def active(self):
+        return not self.left and self.party.ended is None
+
+    def leave(self):
+        self.left = True
+
+
+def keys(rows):
+    return [r[0] for r in rows]
+
+
+class PartyScreenTest(KodiTestCase):
+    """The party screen (lib/windows/partydialog.py) shows watch_together.partyRows() and runs choose()."""
+
+    def test_the_host_starts_what_is_up_next_and_sees_who_is_ready(self):
+        session = FakeSession(LOBBY, 'host')
+
+        rows = watch_together.partyRows(session.party)
+
+        self.assertEqual(rows[0][1], ('Up next: The Godfather', ''))
+        start = rows[keys(rows).index('start')]
+        self.assertEqual(start[1], ('Start for everyone', '1 of 2 ready'))
+        self.assertEqual(rows[keys(rows).index('guest_control')][2], False)
+        self.assertIn('end', keys(rows))
+        self.assertEqual(
+            [r[1] for r in rows if r[0] == 'member'], [('Claude', 'Host'), ('Sam', 'Ready'), ('Alex', 'Not ready')]
+        )
+
+    def test_a_guest_says_it_is_ready(self):
+        session = FakeSession(GUEST_LOBBY, 'guest')
+
+        rows = watch_together.partyRows(session.party)
+        stays = watch_together.choose(session, 'ready')
+
+        self.assertNotIn('start', keys(rows))
+        self.assertEqual(rows[keys(rows).index('ready')][2], False)
+        self.assertIn('leave', keys(rows))
+        self.assertTrue(stays)
+        self.assertEqual(session.party.link.sent, [{'type': 'lobby_ready', 'ready': True}])
+
+    def test_nothing_up_next_yet(self):
+        session = FakeSession(dict(GUEST_LOBBY, selected_content_id=None), 'guest')
+
+        rows = watch_together.partyRows(session.party)
+
+        self.assertEqual(rows[0][1][0], 'Nothing picked yet')
+        self.assertNotIn('ready', keys(rows))
+
+    def test_the_host_lets_guests_play_and_pause(self):
+        session = FakeSession(LOBBY, 'host')
+
+        stays = watch_together.choose(session, 'guest_control')
+
+        self.assertTrue(stays)
+        self.assertEqual(session.room.calls, [('guests', True)])
+        self.assertEqual(session.party.snapshot['guest_control_policy'], 'guest_play_pause')
+
+    def test_starting_closes_the_screen_for_playback(self):
+        session = FakeSession(LOBBY, 'host')
+
+        stays = watch_together.choose(session, 'start')
+
+        self.assertFalse(stays)
+        self.assertEqual(session.room.calls, ['start'])
+        self.assertIsNotNone(session.party.selection())
+
+    def test_a_guest_with_play_and_pause_still_cannot_seek(self):
+        p = party(player=FakePlayer('movie-tmdb-238', position=600.0), self_can_control_transport=True)
+        p.lastTarget = 100.0
+
+        p.onLocalSeek(600.0)
+
+        self.assertEqual(p.link.sent, [])
+        self.assertEqual(p.player.calls, [('seek', 100.0)])
+
+
+class PartyLoopTest(KodiTestCase):
+    """watch_together.runParty(): the party screen while the room plays nothing, the room's item while it plays."""
+
+    def test_a_guest_plays_what_the_room_starts_then_leaves_when_it_stops_here(self):
+        session = FakeSession(GUEST_LOBBY, 'guest')
+        played = []
+
+        def screen(s):
+            s.party.adopt(dict(s.party.snapshot, phase='playing', playback_state='playing', generation=20))
+            return 'play'
+
+        watch_together.runParty(
+            session, lambda video, seconds: played.append(video), screen=screen, ask=lambda *a: True
+        )
+
+        self.assertEqual(played, ['/library/metadata/movie-tmdb-238'])
+        self.assertEqual(session.server.pinnedFiles, {'movie-tmdb-238': 4711})
+        self.assertTrue(session.left)
+
+    def test_the_host_going_back_leaves_the_party_running(self):
+        session = FakeSession(LOBBY, 'host')
+
+        watch_together.runParty(session, lambda video, seconds: None, screen=lambda s: None, ask=lambda *a: True)
+
+        self.assertFalse(session.left)
+
+    def test_the_host_stopping_can_stop_it_for_everyone(self):
+        session = FakeSession(dict(LOBBY, phase='playing', playback_state='playing'), 'host')
+        screens = []
+
+        watch_together.runParty(
+            session,
+            lambda video, seconds: None,
+            screen=lambda s: screens.append(s.party.snapshot['phase']),
+            ask=lambda *a: True,
+            askHost=lambda: watch_together.STOP_FOR_EVERYONE,
+        )
+
+        self.assertEqual(session.room.calls, ['stop'])
+        self.assertEqual(screens, ['lobby'])  # back on the party screen, the item up next again
 
 
 class PartyEndTest(KodiTestCase):

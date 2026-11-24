@@ -11,6 +11,7 @@ The host starts a party from an item's pre-play screen (hostItem()); a guest joi
 menu (joinParty()) and plays whatever the room plays, until the room ends or they leave.
 """
 
+import functools
 import math
 import threading
 import time
@@ -54,6 +55,9 @@ class Party:
         self._lead = SEEK_LEAD
         self._token = 0  # the latest command's: an older command's convergence stops
         self._converging = False
+        self.version = 0  # counts the room's changes: the party screen redraws on a new one
+        self.titleSource = None  # content id -> its name (silonet.room.titleOf)
+        self._titles = {}
         self.ended = None
         self.changed = threading.Event()
         self._echoUntil = 0.0
@@ -68,6 +72,32 @@ class Party:
     @property
     def isHost(self):
         return self.snapshot.get('self_role') == 'host'
+
+    def adopt(self, snapshot):
+        """The room as an answer to one of this device's requests has it (a newer generation than the socket's)."""
+        if snapshot and snapshot.get('generation', 0) >= self.snapshot.get('generation', 0):
+            self.snapshot = dict(snapshot)
+            self.version += 1
+            self.changed.set()
+
+    def selfMember(self):
+        return next((m for m in self.snapshot.get('members') or [] if m.get('is_self')), {})
+
+    def titleFor(self, contentId):
+        """What contentId is called (asked of Silo once); '' when Silo can't say."""
+        if contentId not in self._titles:
+            from silonet.errors import SiloError
+
+            try:
+                self._titles[contentId] = self.titleSource(contentId) if self.titleSource else ''
+            except SiloError:
+                return ''
+        return self._titles[contentId]
+
+    def setLobbyReady(self, ready):
+        """Tell the room this member is ready (or not) for what's up next."""
+        if self.link is not None:
+            self.link.send({'type': 'lobby_ready', 'ready': bool(ready)})
 
     def selection(self):
         """What the room plays, (content id, file id, where it is now in seconds); None while it plays nothing."""
@@ -97,10 +127,7 @@ class Party:
     def onMessage(self, message):
         kind = message.get('type')
         if kind == 'snapshot' and message.get('room'):
-            room = message['room']
-            if room.get('generation', 0) >= self.snapshot.get('generation', 0):
-                self.snapshot = room
-            self.changed.set()
+            self.adopt(message['room'])
         elif kind == 'transport_command' and message.get('command'):
             self._schedule(message['command'])
         elif kind == 'room_closed':
@@ -274,7 +301,8 @@ class Party:
     def onLocalSeek(self, position):
         if self._echo() or not self._roomItemPlaying() or self.link is None:
             return
-        if self.snapshot.get('self_can_control_transport'):
+        # a guest the host lets play and pause still can't seek: Silo takes a guest's play and pause only
+        if self.isHost and self.snapshot.get('self_can_control_transport'):
             self.link.send(
                 {
                     'type': 'transport_request',
@@ -366,6 +394,7 @@ class Session:
     """The party this add-on is in: its room, the room socket, the party and the player watching it."""
 
     def __init__(self, server, room):
+        from silonet import room as rooms
         from silonet.room import RoomSocket
 
         self.server, self.room = server, room
@@ -374,6 +403,7 @@ class Session:
         self.player.party = self.party
         self.link = RoomSocket(server.client, room, self.party.onMessage)
         self.party.link = self.link
+        self.party.titleSource = functools.partial(rooms.titleOf, server.client)
 
     def begin(self):
         self.link.start()
@@ -418,41 +448,38 @@ def _begin(server, room):
     return PARTY
 
 
-def hostItem(video, fileId):
-    """Play video (its fileId version) for a party this profile hosts: a new one, or the one already in progress. The
-    caller plays it from the start once this returns the party; None when Silo refused."""
+# what the host chose, back from playback while the room played on (askHost())
+STOP_FOR_EVERYONE, END_PARTY, KEEP_WATCHING = 0, 1, 2
+
+
+def hostItem(video, fileId, play):
+    """Put video (its fileId version) up next in a party this profile hosts, a new one or the one in progress, and
+    open the party screen: members mark themselves ready, and the host starts it for everyone. In a room already
+    playing, it plays right away. play(video, seconds) plays an item, blocking while it plays."""
     from silonet import room as rooms
     from silonet.errors import SiloError
 
     server = video.getServer()
     session = current(server)
+    contentId = str(video.ratingKey)
     try:
         if session is None or not session.party.isHost:
             session = _begin(server, rooms.create(server.client))
-            fresh = True
+        if session.party.snapshot.get('phase') == 'playing':
+            session.room.select(server.client, contentId, fileId)
         else:
-            fresh = False
-        session.room.select(server.client, str(video.ratingKey), fileId)
+            session.room.stage(server.client, contentId, fileId)
     except SiloError as e:
         util.LOG('Watch party: hosting failed: {0}', e)
         util.showNotification(T(35270, "Couldn't start the watch party"), header=T(35271, 'Watch party'))
-        return None
-    session.party.snapshot = session.room.snapshot
-    server.pinnedFiles[str(video.ratingKey)] = fileId
-    util.LOG('Watch party: hosting {0} as room {1}', video.ratingKey, session.room.snapshot.get('code'))
-    if fresh:
-        util.messageDialog(
-            T(35271, 'Watch party'),
-            T(35263, 'Party code: {0}[CR]Others join from Silo or SM4K with this code.').format(
-                session.room.snapshot.get('code') or ''
-            ),
-        )
-    return session
+        return
+    session.party.adopt(session.room.snapshot)
+    util.LOG('Watch party: hosting {0} in room {1}', contentId, session.room.snapshot.get('code'))
+    runParty(session, play)
 
 
 def joinParty(server, play):
-    """Join a party by its code and play what it plays (play(video, seconds) blocks while it plays), until it ends,
-    or the user leaves it while it plays nothing."""
+    """Join a party by its code, then take part in it (runParty())."""
     from kodi_six import xbmcgui
     from silonet import room as rooms
     from silonet.errors import SiloError
@@ -466,44 +493,160 @@ def joinParty(server, play):
         util.LOG('Watch party: joining failed: {0}', e)
         util.showNotification(T(35272, 'No watch party has that code'), header=T(35271, 'Watch party'))
         return
+    runParty(session, play)
+
+
+def runParty(session, play, screen=None, ask=None, askHost=None):
+    """
+    A party on the main thread: its screen while the room plays nothing, the room's item (from where the room is)
+    while it plays. Returns when this device leaves it, it ends, or the host goes Back from its screen to pick
+    something (the party goes on; the user menu's Watch party comes back to it). Stopping playback while the room plays
+    on asks a guest whether to leave, and the host whether to stop it for everyone, end it, or keep watching.
+    screen(session) -> 'play', 'leave', 'end' or None (Back); ask(text) -> bool; askHost() -> one of STOP_FOR_EVERYONE,
+    END_PARTY, KEEP_WATCHING.
+    """
+    screen = screen or _screen
+    ask = ask or _ask
+    askHost = askHost or _askHost
+    server = session.server
+    while session.active:
+        selection = session.party.selection()
+        if selection is None:
+            how = screen(session)
+            if how in ('leave', 'end'):
+                session.leave()
+                return
+            if how is None and session.party.selection() is None:
+                if session.party.isHost:
+                    return
+                if ask(T(35273, 'Leave the watch party?')):
+                    session.leave()
+                    return
+            continue
+        contentId, fileId, seconds = selection
+        revision = session.party.snapshot.get('selection_revision')
+        server.pinnedFiles[contentId] = fileId
+        play(server.getObject('/library/metadata/' + contentId), seconds)
+        if not session.active:
+            return
+        snapshot = session.party.snapshot
+        if snapshot.get('phase') != 'playing' or snapshot.get('selection_revision') != revision:
+            continue  # the room moved on: back to its screen, or on to what it plays now
+        # stopped here while the room plays on
+        if not session.party.isHost:
+            if ask(T(35273, 'Leave the watch party?')):
+                session.leave()
+                return
+            continue
+        choice = askHost()
+        if choice == END_PARTY:
+            session.leave()
+            return
+        if choice == STOP_FOR_EVERYONE:
+            from silonet.errors import SiloError
+
+            try:
+                session.room.stop(server.client)
+                session.party.adopt(session.room.snapshot)
+            except SiloError as e:
+                util.LOG('Watch party: stopping for everyone failed: {0}', e)
+
+
+def _screen(session):
+    from lib.windows import partydialog
+
+    return partydialog.show(session)
+
+
+def _ask(text):
+    from lib.windows import optionsdialog
+
+    return optionsdialog.show(T(35271, 'Watch party'), text, T(32328, 'Yes'), T(32329, 'No')) == 0
+
+
+def _askHost():
+    from lib.windows import optionsdialog
+
+    choice = optionsdialog.show(
+        T(35271, 'Watch party'),
+        T(35275, 'You stopped watching.'),
+        T(35276, 'Stop for everyone'),
+        T(35269, 'End watch party'),
+        T(35277, 'Keep watching'),
+    )
+    return KEEP_WATCHING if choice is None else choice
+
+
+def playerFor(window):
+    """play() for runParty(): the item from seconds in, in the player window over window, blocking while it plays."""
+
+    def play(video, seconds):
+        from lib.windows import videoplayer
+
+        video.set('viewOffset', int(seconds * 1000))
+        window.processCommand(videoplayer.play(video=video, resume=seconds >= 1, context=window))
+
+    return play
+
+
+def partyRows(party):
+    """The party screen's rows from the room as it stands, as SelectDialog options: (key, label, ticked) - every row
+    with its own tick, so none is ticked as the dialog's current choice."""
+    from lib.windows.dialog import optionGroup
+
+    snapshot = party.snapshot
+    selected = snapshot.get('selected_content_id')
+    lobby = snapshot.get('phase') != 'playing'
+    members = snapshot.get('members') or []
+    if not selected:
+        waiting = '' if party.isHost else T(35264, 'Waiting for the host to start something...')
+        rows = [('status', (T(35278, 'Nothing picked yet'), waiting), False)]
+    elif lobby:
+        rows = [('status', (T(35279, 'Up next: {0}').format(party.titleFor(selected)), ''), False)]
+    else:
+        rows = [('status', (T(35280, 'Playing: {0}').format(party.titleFor(selected)), ''), False)]
+    if party.isHost:
+        if lobby and selected:
+            guests = [m for m in members if not m.get('is_host')]
+            ready = T(35281, '{0} of {1} ready').format(sum(1 for m in guests if m.get('lobby_ready')), len(guests))
+            rows.append(('start', (T(35282, 'Start for everyone'), ready), False))
+        allowed = snapshot.get('guest_control_policy') == 'guest_play_pause'
+        rows.append(('guest_control', T(35283, 'Guests can play and pause'), allowed))
+        rows.append(('end', T(35269, 'End watch party'), False))
+    else:
+        if lobby and selected:
+            rows.append(('ready', T(35284, "I'm ready"), bool(party.selfMember().get('lobby_ready'))))
+        rows.append(('leave', T(35285, 'Leave watch party'), False))
+    rows.append(optionGroup(T(35286, 'In the party')))
+    for member in members:
+        if member.get('is_host'):
+            state = T(35287, 'Host')
+        elif lobby and selected:
+            state = T(35288, 'Ready') if member.get('lobby_ready') else T(35289, 'Not ready')
+        else:
+            state = ''
+        rows.append(('member', (member.get('display_name') or '', state), False))
+    return rows
+
+
+def choose(session, key):
+    """Run a party screen choice; True when the screen stays open (with its rows redrawn), False when it closes on it
+    ('start' closes for playback, 'end' and 'leave' for runParty() to act on)."""
+    from silonet.errors import SiloError
+
+    party, client = session.party, session.server.client
     try:
-        while session.active:
-            selection = _waitForSelection(session)
-            if selection is None:
-                break
-            contentId, fileId, seconds = selection
-            revision = session.party.snapshot.get('selection_revision')
-            server.pinnedFiles[contentId] = fileId
-            play(server.getObject('/library/metadata/' + contentId), seconds)
-            if not session.active:
-                break
-            snapshot = session.party.snapshot
-            # stopped here while the room plays on
-            stoppedHere = snapshot.get('phase') == 'playing' and snapshot.get('selection_revision') == revision
-            if stoppedHere and xbmcgui.Dialog().yesno(T(35271, 'Watch party'), T(35273, 'Leave the watch party?')):
-                break
-    finally:
-        session.leave()
-
-
-def _waitForSelection(session):
-    """What the room plays, waiting with a dialog while it plays nothing; None when the user leaves or it ends."""
-    from kodi_six import xbmcgui
-
-    selection = session.party.selection()
-    if selection is not None:
-        return selection
-    dialog = xbmcgui.DialogProgress()
-    dialog.create(T(35271, 'Watch party'), T(35264, 'Waiting for the host to start something...'))
-    try:
-        while session.active:
-            if dialog.iscanceled():
-                return None
-            selection = session.party.selection()
-            if selection is not None:
-                return selection
-            session.party.changed.clear()
-            session.party.changed.wait(0.5)
-    finally:
-        dialog.close()
-    return None
+        if key == 'ready':
+            party.setLobbyReady(not party.selfMember().get('lobby_ready'))
+        elif key == 'guest_control':
+            session.room.setGuestControl(client, party.snapshot.get('guest_control_policy') != 'guest_play_pause')
+            party.adopt(session.room.snapshot)
+        elif key == 'start':
+            session.room.start(client)
+            party.adopt(session.room.snapshot)
+            return False
+        elif key in ('end', 'leave'):
+            return False
+    except SiloError as e:
+        util.LOG('Watch party: {0} failed: {1}', key, e)
+    return True

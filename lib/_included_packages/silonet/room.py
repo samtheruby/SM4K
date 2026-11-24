@@ -57,6 +57,27 @@ class Room:
             body['file_id'] = str(fileId)
         self.update(client.request('PUT', self._path('/selection'), json=body) or {})
 
+    def stage(self, client, contentId, fileId=None):
+        """Put contentId up next in the lobby, as its host, without starting it: members mark themselves ready, and the
+        host starts it for everyone (start())."""
+        body = {'content_id': contentId}
+        if fileId:
+            body['file_id'] = str(fileId)
+        self.update(client.request('PUT', self._path('/staged-selection'), json=body) or {})
+
+    def start(self, client):
+        """Start what's up next for everyone, as the host."""
+        self.update(client.request('POST', self._path('/playback/start')) or {})
+
+    def stop(self, client):
+        """Stop playing for everyone, as the host: the room goes back to its lobby, the item up next again."""
+        self.update(client.request('POST', self._path('/playback/stop')) or {})
+
+    def setGuestControl(self, client, allowed):
+        """Let guests play and pause the room (or only the host), as the host."""
+        policy = 'guest_play_pause' if allowed else 'host_only'
+        self.update(client.request('PATCH', self._path('/policy'), json={'guest_control_policy': policy}) or {})
+
     def read(self, client):
         self.update(client.request('GET', self._path(), headers={'X-Room-Token': self.token}) or {})
 
@@ -70,6 +91,16 @@ class Room:
     def end(self, client):
         """End the room for everyone, as its host."""
         client.request('DELETE', self._path())
+
+
+def titleOf(client, contentId):
+    """What a room plays, by name: a film's title, an episode's series, numbers and title."""
+    item = client.request('GET', f'/api/v2/catalog/items/{contentId}') or {}
+    title = item.get('title') or ''
+    if item.get('type') == 'episode' and item.get('series_title'):
+        numbers = f'S{item.get("season_number") or 0}E{item.get("episode_number") or 0}'
+        return f'{item["series_title"]} · {numbers} · {title}'
+    return title
 
 
 def join(client, code):
