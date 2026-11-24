@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 import six
-from plexnet import playqueue, plexapp, plexlibrary
+from plexnet import playlist, playqueue, plexapp, plexlibrary
 
 from lib import util
 from . import busy
@@ -28,6 +28,10 @@ def open(obj, context=None, **kwargs):
             from . import videoplayer
             videoplayer.play(play_queue=obj, context=context, **kwargs)
             return ''
+    elif isinstance(obj, playlist.BasePlaylist):
+        # a queue SiloMod built itself (playqueue.createLocalPlayQueue()): nothing to wait for
+        from . import videoplayer
+        return videoplayer.play(play_queue=obj, context=context, **kwargs)
     elif isinstance(obj, six.string_types):
         key = obj
         if not obj.startswith('/'):

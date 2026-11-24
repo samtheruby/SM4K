@@ -76,9 +76,8 @@ class SiloServer(SignalsMixin):
     supportsVideoTranscoding = True
     supportsVideoRemuxOnly = False
     supportsAudioTranscoding = True
-    # the player's playback info panel (seekdialog.py) reads these; the playing item's session comes from
-    # findVideoSession(), as Silo lists no Plex sessions
-    anyLANConnection = True
+    # the player's playback info panel (seekdialog.py) reads this and anyLANConnection; the playing item's session
+    # comes from findVideoSession(), as Silo lists no Plex sessions
     sessions = ()
     # theme music (lib/windows/mixins/thememusic.py) downloads a theme first unless the server is local
     isLocal = False
@@ -97,6 +96,7 @@ class SiloServer(SignalsMixin):
         self._routes = {'/library/sections': self._sections}
         self._homeCapabilities = None
         self._libraryTypes = {}  # library id -> Plex section type, from the library list (a collection's subtype)
+        self._libraryPaths = None  # library id -> its folders on the server (libraryLocations())
         self.playback = playback.Playback(client, getattr(client.device, 'clientVersion', ''))
         self._subtitleResults = {}  # a subtitle search result's key -> the result, for its download
         self._previews = {}  # file id -> its item's id, for a played file with seek-bar previews
@@ -105,6 +105,17 @@ class SiloServer(SignalsMixin):
 
     def __repr__(self):
         return f'<SiloServer {self.name}>'
+
+    @property
+    def anyLANConnection(self):
+        """Whether Silo sees this connection as local (GET /api/v2/playback/connection: local, remote or
+        provider:<name>), what the playback info panel's Mode shows as "lan (verified)" or "remote". Not when Silo
+        doesn't say."""
+        try:
+            answer = self.client.request('GET', '/api/v2/playback/connection') or {}
+        except SiloError:
+            return False
+        return answer.get('connection') == 'local'
 
     def query(self, path, method=None, raw=False, **kwargs):
         """The answer to a Plex path as XML; None when Silo couldn't answer (as PlexServer.query returns)."""
@@ -237,6 +248,18 @@ class SiloServer(SignalsMixin):
                 )
             )
         return container(sections)
+
+    def libraryLocations(self, libraryId):
+        """A library's folders on the server, for path mapping (plexlibrary.LibrarySection.locations): GET
+        /api/v2/libraries, read once. None when Silo doesn't list them (it may refuse an account that isn't an
+        admin)."""
+        if self._libraryPaths is None:
+            try:
+                data = self.client.request('GET', '/api/v2/libraries') or {}
+            except SiloError:
+                return []
+            self._libraryPaths = {str(entry.get('id')): entry.get('paths') or [] for entry in data.get('items') or []}
+        return list(self._libraryPaths.get(str(libraryId), []))
 
     def buildUrl(self, path, includeToken=False):
         """An absolute URL for a path. A subtitle file's key (silonet.detail: /silo/subtitles/<file>/<source>/<ref>)

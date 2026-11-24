@@ -285,6 +285,11 @@ class PlexPlayer(BasePlayer):
         obj.isRequestToServer = True
         obj.isTranscoded = not (attempt.delivery == 'original_http' or seekable)
         obj.streamUrls = [attempt.url]
+        # path mapping: the original straight from the Kodi source its folder maps to (path_mapping.json), the
+        # attempt still Silo's (its progress, markers and subtitles); a remux or transcode is never the file itself
+        mapped = attempt.delivery == 'original_http' and part.getPathMappedUrl()
+        if mapped:
+            obj.streamUrls, obj.isMapped, obj.isRequestToServer = [mapped], True, False
         obj.playStart = int(timeline.get('player_start_seconds') or 0)
         if subtitle and attempt.delivery == 'original_http' \
                 and self.choice.subtitleDecision == self.choice.SUBTITLES_SOFT_DP:

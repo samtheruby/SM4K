@@ -51,6 +51,8 @@ def sessionElement(attempt):
     audio = {'streamType': 2, 'id': f'{fileId}.a{audioIndex}', 'decision': 'directplay'}
     if mode != 'directplay':
         part['container'] = recipe.get('segment_container') or (plan.get('stream') or {}).get('container')
+        # why Silo changed the file, in words: the panel's Mode (plexnet.videosession ModePPI)
+        part['decisionReason'] = (plan.get('decision_reason') or '').replace('_', ' ') or None
     if mode == 'remux':
         # copied, also when the recipe's dynamic range differs (a Dolby Vision profile Silo converts on the way)
         video['decision'] = audio['decision'] = 'copy'
