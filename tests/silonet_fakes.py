@@ -45,6 +45,9 @@ class FakeSession:
     def queue(self, *responses):
         self.responses.extend(responses)
 
+    def put(self, url, **kwargs):  # plexnet passes requests' session methods along (method=server.session.put)
+        return self.request('PUT', url, **kwargs)
+
     def request(self, method, url, params=None, json=None, headers=None, timeout=None):
         self.calls.append(
             {

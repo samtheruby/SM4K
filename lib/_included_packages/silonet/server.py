@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 from plexnet.signalsmixin import SignalsMixin
 
-from . import detail, home, library, people, playback, related, shows, trackprefs, trickplay, watch
+from . import detail, home, library, people, playback, related, shows, trackprefs, trickplay, watch, watchstate
 from .client import log
 from .errors import SiloError
 from .items import container
@@ -70,6 +70,7 @@ class SiloServer(SignalsMixin):
         self.uuid = stored.serverId
         self.name = stored.name or stored.baseUrl
         self.activeConnection = SiloConnection(client.baseUrl)
+        self.session = client.session  # plexnet passes its methods to query() (method=server.session.put)
         self._unmapped = set()
         self._routes = {'/library/sections': self._sections}
         self._homeCapabilities = None
@@ -86,6 +87,8 @@ class SiloServer(SignalsMixin):
         route, _, queryString = path.partition('?')
         route = route.rstrip('/') or '/'
         handler = self._routes.get(route)
+        if handler is None and route in watchstate.ROUTES:
+            handler = functools.partial(watchstate.change, self.client, route, dict(parse_qsl(queryString)))
         if handler is None and route.startswith(home.ROW_PATH):
             handler = functools.partial(self._row, route, kwargs.get('offset'), kwargs.get('limit'))
         libraryPath = LIBRARY_PATH.match(route) if handler is None else None
