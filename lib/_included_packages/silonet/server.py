@@ -502,10 +502,15 @@ class SiloServer(SignalsMixin):
 
 def _part(video):
     """The part (file) the video plays: its chosen version's, else its first."""
+    from plexnet.plexobjects import PlexValue
+
     choice = getattr(video, 'mediaChoice', None)
     if choice is not None and getattr(choice, 'part', None) is not None:
         return choice.part
-    media = video.media() if callable(getattr(video, 'media', None)) else getattr(video, 'media', None)
+    media = getattr(video, 'media', None)
+    if isinstance(media, PlexValue):
+        return None  # an item not loaded with its files (a card): plexnet's stand-in for an attribute it lacks
+    media = media() if callable(media) else media
     if media and media[0].parts:
         return media[0].parts[0]
     return None
