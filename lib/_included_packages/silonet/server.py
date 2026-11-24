@@ -21,6 +21,7 @@ from . import (
     related,
     search,
     shows,
+    streaminfo,
     trackprefs,
     trickplay,
     watch,
@@ -75,7 +76,8 @@ class SiloServer(SignalsMixin):
     supportsVideoTranscoding = True
     supportsVideoRemuxOnly = False
     supportsAudioTranscoding = True
-    # the player's playback info panel (seekdialog.py) looks for a Plex transcode session, which Silo has none of
+    # the player's playback info panel (seekdialog.py) reads these; the playing item's session comes from
+    # findVideoSession(), as Silo lists no Plex sessions
     anyLANConnection = True
     sessions = ()
     # theme music (lib/windows/mixins/thememusic.py) downloads a theme first unless the server is local
@@ -435,9 +437,15 @@ class SiloServer(SignalsMixin):
         return stream
 
     def findVideoSession(self, sessionId, ratingKey):
-        from plexnet import exceptions
+        """The playing item's session for the player's info panel (Show Stream Info), as Plex's /status/sessions
+        lists it: what the item's attempt sends (silonet.streaminfo). sessionId is the player's own, which Silo
+        doesn't know."""
+        from plexnet import exceptions, plexobjects, video  # noqa: F401 (video registers the item types)
 
-        raise exceptions.NotFound  # the panel says the info isn't available
+        attempt = self.playback.attempts.get(str(ratingKey))
+        if attempt is None:
+            raise exceptions.NotFound  # the panel says the info isn't available
+        return plexobjects.buildItem(self, streaminfo.sessionElement(attempt), '/status/sessions')
 
     def reportTimeline(self, params):
         """A player timeline (plexnet nowplayingmanager): progress or stop for the item's attempt."""
