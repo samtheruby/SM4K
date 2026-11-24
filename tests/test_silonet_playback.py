@@ -53,13 +53,17 @@ def ok(body, status=200):
     return FakeResponse(status, body)
 
 
+# the played file's markers and chapters (silonet.watch), none
+NO_WATCH = FakeResponse(200, {'versions': []})
+
+
 class SiloPlayTest(KodiTestCase):
     def setUp(self):
         super().setUp()
         ensure_plex_interface()
 
     def built(self, *responses, offset=0):
-        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), *responses)
+        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), *responses, NO_WATCH)
         srv = server(session)
         movie = tile(srv, MOVIE).reload()
         player = plexplayer.PlexPlayer(movie, offset)
@@ -102,7 +106,7 @@ class SiloPlayTest(KodiTestCase):
         self.assertIs(player.getServerDecision(), player)
 
     def built_with(self, quality=16, disableHdr=False):
-        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), ok(decision(), 201))
+        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), ok(decision(), 201), NO_WATCH)
         movie = tile(server(session), MOVIE).reload()
         settings = type(movie.settings)
         preference = settings.getPreference
@@ -182,7 +186,7 @@ class SiloProgressTest(KodiTestCase):
     def setUp(self):
         super().setUp()
         ensure_plex_interface()
-        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), ok(decision(), 201))
+        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), ok(decision(), 201), NO_WATCH)
         self.server = server(session)
         movie = tile(self.server, MOVIE).reload()
         plexplayer.PlexPlayer(movie, 0).build()
@@ -197,9 +201,9 @@ class SiloProgressTest(KodiTestCase):
         self.timeline('playing', 60000)
         self.timeline('paused', 61500)
 
-        self.assertEqual([c['url'] for c in self.session.calls[3:]], [BASE + '/playback/S1/progress'] * 2)
+        self.assertEqual([c['url'] for c in self.session.calls[4:]], [BASE + '/playback/S1/progress'] * 2)
         self.assertEqual(
-            [c['json'] for c in self.session.calls[3:]],
+            [c['json'] for c in self.session.calls[4:]],
             [
                 {'installation_id': 'inst-1', 'sequence': 1, 'position': 60.0, 'is_paused': False},
                 {'installation_id': 'inst-1', 'sequence': 2, 'position': 61.5, 'is_paused': True},
@@ -212,8 +216,8 @@ class SiloProgressTest(KodiTestCase):
         self.timeline('stopped', 90000)
         self.timeline('stopped', 90000)
 
-        self.assertEqual(len(self.session.calls), 4)
-        stop = self.session.calls[3]
+        self.assertEqual(len(self.session.calls), 5)
+        stop = self.session.calls[4]
         self.assertEqual((stop['method'], stop['url']), ('DELETE', BASE + '/playback/S1'))
         self.assertTrue(
             re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', stop['json']['stop_id'])
@@ -228,7 +232,7 @@ class SiloProgressTest(KodiTestCase):
         self.timeline('playing', 60000)
         self.timeline('playing', 75000)
 
-        self.assertEqual(len(self.session.calls), 4)  # the 404'd progress; nothing after
+        self.assertEqual(len(self.session.calls), 5)  # the 404'd progress; nothing after
 
 
 class SiloTimelinesTest(KodiTestCase):
@@ -239,7 +243,7 @@ class SiloTimelinesTest(KodiTestCase):
         ensure_plex_interface()
 
     def test_a_timeline_is_progress(self):
-        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), ok(decision(), 201), ok({'outcome': 'applied'}))
+        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), ok(decision(), 201), NO_WATCH, ok({'outcome': 'applied'}))
         srv = server(session)
         movie = tile(srv, MOVIE).reload()
         plexplayer.PlexPlayer(movie, 0).build()
@@ -249,8 +253,29 @@ class SiloTimelinesTest(KodiTestCase):
         manager.updatePlaybackState('video', item, 'playing', 42000, server=srv)
         manager.waitForTimelines(5)
 
-        self.assertEqual(session.calls[3]['url'], BASE + '/playback/S1/progress')
-        self.assertEqual(session.calls[3]['json']['position'], 42.0)
+        self.assertEqual(session.calls[4]['url'], BASE + '/playback/S1/progress')
+        self.assertEqual(session.calls[4]['json']['position'], 42.0)
+
+    def test_the_worker_ends_when_idle(self):
+        """The add-on's exit waits for every thread (lib/main.py waitForThreads()): an idle worker that never ended
+        made it hard-exit, and Kodi then reopened the half-closed add-on (seen on the box, 2026-11-24)."""
+        import threading
+        import time
+
+        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), ok(decision(), 201), NO_WATCH, ok({'outcome': 'applied'}))
+        srv = server(session)
+        movie = tile(srv, MOVIE).reload()
+        plexplayer.PlexPlayer(movie, 0).build()
+        manager = nowplayingmanager.NowPlayingManager()
+        item = util.AttributeDict(ratingKey='movie-tmdb-718821', duration=7344000, key=movie.key)
+        manager.updatePlaybackState('video', item, 'playing', 42000, server=srv)
+        manager.waitForTimelines(5)
+
+        deadline = time.time() + 5
+        while time.time() < deadline and any(t.name == 'silo.timelines' for t in threading.enumerate()):
+            time.sleep(0.1)
+
+        self.assertFalse(any(t.name == 'silo.timelines' for t in threading.enumerate()))
 
 
 class SiloPlayerSeamsTest(KodiTestCase):

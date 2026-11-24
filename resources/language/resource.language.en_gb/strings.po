@@ -4132,3 +4132,19 @@ msgstr ""
 msgctxt "#35252"
 msgid "Can't reach the Silo server. Check your connection and try again."
 msgstr ""
+
+msgctxt "#35253"
+msgid "Skip recap"
+msgstr ""
+
+msgctxt "#35254"
+msgid "Skipping recap"
+msgstr ""
+
+msgctxt "#35255"
+msgid "Skip preview"
+msgstr ""
+
+msgctxt "#35256"
+msgid "Skipping preview"
+msgstr ""

@@ -13,7 +13,7 @@ from plexnet import plexplayer
 from .base import KodiTestCase, ensure_plex_interface
 from .silonet_fakes import FakeResponse, FakeSession
 from .test_silonet_detail import MOVIE, server, tile
-from .test_silonet_playback import CAPABILITIES, decision
+from .test_silonet_playback import CAPABILITIES, NO_WATCH, decision
 
 BASE = 'http://silo.lan:8090/api/v2'
 HOST = 'http://silo.lan:8090'
@@ -83,7 +83,7 @@ class SiloSubtitleFilesTest(KodiTestCase):
         ensure_plex_interface()
 
     def test_a_subtitle_file_beside_the_video_plays_from_the_plan(self):
-        session = FakeSession(ok(withExternal()), ok(CAPABILITIES), ok(planWith(EXTERNAL, EMBEDDED), 201))
+        session = FakeSession(ok(withExternal()), ok(CAPABILITIES), ok(planWith(EXTERNAL, EMBEDDED), 201), NO_WATCH)
         movie = tile(server(session), withExternal()).reload()
         plexplayer.PlexPlayer(movie, 0).build()
 
@@ -139,6 +139,7 @@ class SiloSubtitleSearchTest(KodiTestCase):
             ok({'results': [RESULT], 'warnings': []}),
             ok(CAPABILITIES),
             ok(planWith(), 201),
+            NO_WATCH,
             ok(stored),
             ok(planWith(DOWNLOADED)),
         )
@@ -147,7 +148,7 @@ class SiloSubtitleSearchTest(KodiTestCase):
 
         stream = movie.downloadSubtitles(found[0].key)
 
-        download, replan = self.session.calls[4], self.session.calls[5]
+        download, replan = self.session.calls[5], self.session.calls[6]
         self.assertEqual(
             (download['url'], download['json']['provider'], download['json']['subtitle_id']),
             (BASE + '/subtitles/download', 'opensubtitles', 'r1'),

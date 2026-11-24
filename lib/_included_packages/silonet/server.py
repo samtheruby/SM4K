@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 from plexnet.signalsmixin import SignalsMixin
 
-from . import detail, home, library, people, playback, related, shows, trackprefs
+from . import detail, home, library, people, playback, related, shows, trackprefs, trickplay, watch
 from .client import log
 from .errors import SiloError
 from .items import container
@@ -76,6 +76,7 @@ class SiloServer(SignalsMixin):
         self._libraryTypes = {}  # library id -> Plex section type, from the library list (a collection's subtype)
         self.playback = playback.Playback(client, getattr(client.device, 'clientVersion', ''))
         self._subtitleResults = {}  # a subtitle search result's key -> the result, for its download
+        self._previews = {}  # file id -> its item's id, for a played file with seek-bar previews
 
     def __repr__(self):
         return f'<SiloServer {self.name}>'
@@ -220,6 +221,48 @@ class SiloServer(SignalsMixin):
         return self.playback.start(
             str(item.ratingKey), part.id, seconds, audioIndex, subtitleIndex, quality, bandwidthCap, hdr
         )
+
+    def watchInfo(self, item, fileId):
+        """The played file's skip markers and chapters (silonet.watch), as plexnet Marker and Chapter lists; empty
+        when Silo can't say."""
+        from plexnet import media, plexobjects
+
+        try:
+            answer = self.client.request('GET', f'/api/v2/watch/{item.ratingKey}') or {}
+        except SiloError as e:
+            log(f'watch info of {item.ratingKey} failed: {e.status} {e.type}')
+            answer = {}
+        if watch.hasPreviews(answer, fileId):
+            self._previews[str(fileId)] = str(item.ratingKey)
+        root = container(watch.markerElements(answer, fileId) + watch.chapterElements(answer, fileId))
+        markers = plexobjects.PlexItemList(root, media.Marker, media.Marker.TYPE, server=self)
+        chapters = plexobjects.PlexItemList(root, media.Chapter, media.Chapter.TYPE, server=self)
+        return markers, chapters
+
+    def hasPreviews(self, fileId):
+        """Whether the file being played has seek-bar previews Kodi can show (Silo's, and Pillow to cut them)."""
+        return str(fileId) in self._previews and trickplay.available()
+
+    def trickplayIndex(self, fileId):
+        """The file's previews (GET /api/v2/watch/{id}/trickplay) as an index the preview store reads
+        (silonet.trickplay.SheetIndex), or None."""
+        contentId = self._previews.get(str(fileId))
+        if not contentId or not trickplay.available():
+            return None
+        try:
+            manifest = self.client.request(
+                'GET', f'/api/v2/watch/{contentId}/trickplay', params={'file_id': str(fileId)}
+            )
+        except SiloError as e:
+            log(f'previews of {fileId} failed: {e.status} {e.type}')
+            return None
+
+        def fetch(url):
+            response = self.client.session.request('GET', url, timeout=self.client.timeout)
+            response.raise_for_status()
+            return response.content
+
+        return trickplay.SheetIndex(manifest or {}, self.client.baseUrl, fetch)
 
     def themeUrl(self, item):
         """The item's theme song (decision D15) as a short-lived URL (POST .../themes/{id}/playback), or None: no

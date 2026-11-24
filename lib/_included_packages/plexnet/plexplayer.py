@@ -13,6 +13,8 @@ from lib.language_util import getNativeLanguages
 from six.moves import range
 
 DecisionFailure = serverdecision.DecisionFailure
+# getBifUrl()'s answer for a Silo file with seek-bar previews, which the preview store has, not a URL
+SILO_PREVIEWS = 'silo:previews'
 
 
 class BasePlayer(object):
@@ -258,6 +260,14 @@ class PlexPlayer(BasePlayer):
             raise DecisionFailure(e.reason, e.message)
         except SiloError as e:
             raise DecisionFailure(e.type, e.detail or e.type)
+
+        # the played file's skip markers and chapters, which the player reads off the item (decision D16)
+        self.item.markers, chapters = server.watchInfo(self.item, part.id)
+        if chapters:
+            self.item.chapters = chapters
+        if server.hasPreviews(part.id):
+            # its seek-bar previews: the preview store asks the server for them (SiloServer.trickplayIndex())
+            part.set('indexes', 'sd')
 
         timeline = attempt.timeline
         seekable = bool(timeline.get('can_seek_anywhere')) and not timeline.get('stream_origin_seconds')
@@ -708,6 +718,9 @@ class PlexPlayer(BasePlayer):
 
     def getBifUrl(self, offset=0):
         server = self.item.getServer()
+        if hasattr(server, 'trickplayIndex'):
+            # a Silo file's previews are only the preview store's (SiloServer.trickplayIndex()): this says it has some
+            return SILO_PREVIEWS if self.media.parts and self.media.parts[0].isIndexed() else None
         startOffset = 0
         for part in self.media.parts:
             duration = part.duration.asInt()
