@@ -17,7 +17,7 @@ from .items import container
 # Silo library types to the Plex section types plexlibrary knows; mixed libraries wait for a later phase
 SECTION_TYPES = {'movies': 'movie', 'series': 'show'}
 # a library's grid (plexlibrary.LibrarySection.all()) and its sort menu: /library/sections/<library id>/all|sorts
-LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts)$')
+LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter)$')
 
 
 class SiloConnection:
@@ -60,6 +60,10 @@ class SiloServer:
         libraryPath = LIBRARY_PATH.match(route) if handler is None else None
         if libraryPath and libraryPath.group(2) == 'sorts':
             handler = library.sortsContainer
+        elif libraryPath and libraryPath.group(2) == 'firstCharacter':
+            handler = functools.partial(
+                library.jumpBar, self.client, libraryPath.group(1), dict(parse_qsl(queryString))
+            )
         elif libraryPath:
             handler = functools.partial(
                 library.libraryItems,

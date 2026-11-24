@@ -82,3 +82,26 @@ def libraryItems(client, libraryId, args, offset=None, limit=None):
     for element in elements:
         element.set('librarySectionID', libraryId)
     return container(elements, totalSize=total, offset=start)
+
+
+def jumpBar(client, libraryId, args):
+    """
+    /library/sections/<id>/firstCharacter (LibrarySection.jumpList()) from POST /api/v2/catalog/letters: one
+    <Directory> per run, Silo's blocks of consecutive titles under one letter, covering the list in order. Uno adds up
+    the sizes to place each entry, so a run's size is the distance to the next one and every letter starts where
+    Silo says. A letter in two blocks keeps both, the second with its own key.
+    """
+    order = 'desc' if (args.get('sort') or '').split(',')[0].endswith(':desc') else 'asc'
+    answer = client.request('POST', '/api/v2/catalog/letters', json={'library_id': libraryId, 'order': order}) or {}
+    runs = answer.get('runs') or []
+    total = answer.get('total') or 0
+    entries, seen = [], {}
+    for index, run in enumerate(runs):
+        end = runs[index + 1]['position'] if index + 1 < len(runs) else total
+        letter = run.get('letter') or '#'
+        seen[letter] = seen.get(letter, 0) + 1
+        key = letter if seen[letter] == 1 else f'{letter}~{seen[letter]}'
+        entries.append(
+            ElementTree.Element('Directory', {'key': key, 'title': letter, 'size': str(end - run['position'])})
+        )
+    return container(entries)

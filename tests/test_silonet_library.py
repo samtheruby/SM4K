@@ -179,3 +179,49 @@ class SiloLibrarySortTest(KodiTestCase):
         section(session).all(0, 50, sort=('lastViewedAt', 'desc'))
 
         self.assertNotIn('sort', session.calls[1]['params'])
+
+
+def letters(runs, total):
+    """POST /api/v2/catalog/letters: runs as (letter, position)."""
+    return FakeResponse(200, {'total': total, 'letters': [], 'runs': [{'letter': l, 'position': p} for l, p in runs]})
+
+
+class SiloLibraryJumpBarTest(KodiTestCase):
+    """The grid's A-Z bar (LibrarySection.jumpList(): /library/sections/<id>/firstCharacter) from Silo's letters: one
+    entry per block of titles under a letter, in list order, sized so each starts where Silo says it does."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+
+    def test_letters_in_list_order_sized_to_their_positions(self):
+        session = FakeSession(LIBRARIES, letters([('#', 0), ('A', 4), ('B', 16), ('C', 19)], 33))
+
+        bar = section(session).jumpList(sort=('titleSort', 'asc'))
+
+        self.assertEqual([(str(j.title), j.size.asInt()) for j in bar], [('#', 4), ('A', 12), ('B', 3), ('C', 14)])
+        call = session.calls[1]
+        self.assertEqual((call['method'], call['url']), ('POST', 'http://silo.lan:8090/api/v2/catalog/letters'))
+        self.assertEqual(call['json'], {'library_id': '2', 'order': 'asc'})
+
+    def test_descending_titles_ask_for_descending_letters(self):
+        session = FakeSession(LIBRARIES, letters([('Z', 0), ('A', 5)], 9))
+
+        section(session).jumpList(sort=('titleSort', 'desc'))
+
+        self.assertEqual(session.calls[1]['json']['order'], 'desc')
+
+    def test_a_letter_in_two_blocks_keeps_each_blocks_place(self):
+        session = FakeSession(LIBRARIES, letters([('A', 0), ('B', 3), ('A', 5)], 8))
+
+        bar = section(session).jumpList(sort=('titleSort', 'asc'))
+
+        self.assertEqual([(str(j.title), j.size.asInt()) for j in bar], [('A', 3), ('B', 2), ('A', 3)])
+        self.assertEqual(len({str(j.key) for j in bar}), 3)
+
+    def test_no_letters_means_no_bar(self):
+        bar = section(FakeSession(LIBRARIES, problem(503, 'dependency_unavailable'))).jumpList(
+            sort=('titleSort', 'asc')
+        )
+
+        self.assertFalse(bar)
