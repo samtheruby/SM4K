@@ -45,6 +45,7 @@ class Party:
         self.ended = None
         self.changed = threading.Event()
         self._echoUntil = 0.0
+        self._attaching = None
         self._stop = threading.Event()
 
     # the room
@@ -91,6 +92,8 @@ class Party:
             self._end('connection_replaced', T(35266, 'This profile joined the watch party on another device'))
         elif kind == 'error' and message.get('code') in ('not_found', 'gone'):
             self._end(message['code'], T(35265, 'The watch party has ended'))
+        elif kind == 'error':
+            util.LOG('Watch party: the room says {0}: {1}', message.get('code'), message.get('message'))
 
     def _schedule(self, command):
         from silonet.room import epoch
@@ -117,6 +120,7 @@ class Party:
         if self.player.isPaused() == playing:
             self.player.setPaused(not playing)
         self.lastCommand, self.lastTarget = command, target
+        util.LOG('Watch party: ran {0} at {1:.1f}', command.get('action'), target)
 
     # reports
     def tick(self):
@@ -128,6 +132,9 @@ class Party:
         if not session:
             return
         if self.snapshot.get('attached_session_id') != session:
+            if self._attaching != session:
+                util.LOG('Watch party: attaching its playback session')
+                self._attaching = session
             self.link.send({'type': 'attach_session', 'session_id': session})
             return
         position = round(self.player.position(), 3)
