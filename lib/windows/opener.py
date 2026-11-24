@@ -32,9 +32,6 @@ def open(obj, context=None, **kwargs):
                 # carry-over every other opener branch passes on. handleOpen() pops the auto_play
                 # pair, so library.py's Play All still works the same way.
                 return handleOpen(musicplayer.MusicPlayerWindow, track=obj.current(), playlist=obj, **kwargs)
-            elif obj.type == 'photo':
-                from . import photos
-                return handleOpen(photos.PhotoWindow, play_queue=obj, **kwargs)
             else:
                 from . import videoplayer
                 videoplayer.play(play_queue=obj, context=context, **kwargs)
@@ -59,8 +56,6 @@ def open(obj, context=None, **kwargs):
         return seasonClicked(obj, context=context, **kwargs)
     elif obj.TYPE in ('album'):
         return albumClicked(obj, context=context, **kwargs)
-    elif obj.TYPE in ('photo',):
-        return photoClicked(obj, **kwargs)
     elif obj.TYPE in ('photodirectory'):
         return photoDirectoryClicked(obj, context=context, **kwargs)
     elif obj.TYPE in ('track'):
@@ -212,11 +207,6 @@ def albumClicked(album, context=None, **kwargs):
         context.openWindow(tracks.AlbumWindow, album=album, **kwargs)
         return ''
     return handleOpen(tracks.AlbumWindow, album=album, **kwargs)
-
-
-def photoClicked(photo, **kwargs):
-    from . import photos
-    return handleOpen(photos.PhotoWindow, photo=photo, **kwargs)
 
 
 def trackClicked(track, container_path=None, **kwargs):

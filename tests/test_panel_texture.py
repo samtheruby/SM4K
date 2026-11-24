@@ -235,7 +235,7 @@ class WindowTest(PanelTextureCase):
 
 class TemplateTest(KodiTestCase):
     """The panel is one image, in every window that has it, with the hero art over it through its cut-out."""
-    MAIN_WINDOWS = ("posters", "ar16x9", "pre_play", "episodes", "recommended", "photo", "music_player",
+    MAIN_WINDOWS = ("posters", "ar16x9", "pre_play", "episodes", "recommended", "music_player",
                     "music_current_playlist")
     CORNER_IDS = set(str(i) for i in list(range(2101, 2109)) + list(range(2111, 2119)))
 
