@@ -8,6 +8,21 @@
     <height>1080</height>
     <texture colordiffuse="FF141417">script.plex/white-square.png</texture>
 </control>
+<!-- two soft spotlights behind everything: script.plex/glow.png is a white disc fading to transparent, dithered -->
+<control type="image">
+    <posx>-300</posx>
+    <posy>{{ vscale(-420) }}</posy>
+    <width>1200</width>
+    <height>{{ vscale(1200) }}</height>
+    <texture>script.plex/glow.png</texture>
+</control>
+<control type="image">
+    <posx>1100</posx>
+    <posy>{{ vscale(-520) }}</posy>
+    <width>1200</width>
+    <height>{{ vscale(1200) }}</height>
+    <texture>script.plex/glow.png</texture>
+</control>
 <control type="group">
     <posx>140</posx>
     <posy>0</posy>
