@@ -62,10 +62,12 @@ class SiloSignInTest(KodiTestCase):
         with mock.patch.object(signin.PinLoginWindow, 'create', return_value=window):
             return silo.signIn(client, 'http://silo.lan:8090')
 
-    def test_qr_image_is_a_png_in_kodis_temp_folder(self):
+    def test_qr_image_is_a_png_in_the_add_ons_profile_folder(self):
+        # not Kodi's temp folder: on the user's box Kodi wouldn't load any image from there ("Direct texture file loading
+        # failed", a known-good PNG too); from the add-on's own folders it does
         path = signin.qrImage('http://silo.lan:8090/4821-7730?code=4821-7730')
 
-        self.assertEqual(os.path.dirname(path), ENV.temp_dir)
+        self.assertEqual(os.path.dirname(path), os.path.join(silo.util.PROFILE, 'qr'))
         with open(path, 'rb') as f:
             self.assertEqual(f.read(8), b'\x89PNG\r\n\x1a\n')
 

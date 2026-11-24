@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import hashlib
 import os
 
-from kodi_six import xbmcgui, xbmcvfs
+from kodi_six import xbmcgui
 
 from lib import util
 from . import kodigui
@@ -13,11 +13,13 @@ QR_PREFIX = 'silomod_qr_'
 
 
 def qrImage(text):
-    """A PNG of text's QR code in Kodi's temp folder, for the card's image; the one before it is deleted. Each text
-    gets its own name, as Kodi caches an image by its path."""
+    """A PNG of text's QR code in the add-on's profile folder, for the card's image; the one before it is deleted. Each
+    text gets its own name, as Kodi caches an image by its path. Not Kodi's temp folder: Kodi loads no image from there
+    ("Direct texture file loading failed" on the user's box, for any PNG)."""
     import segno
 
-    folder = xbmcvfs.translatePath('special://temp')
+    folder = os.path.join(util.PROFILE, 'qr')
+    os.makedirs(folder, exist_ok=True)
     name = QR_PREFIX + hashlib.sha1(text.encode('utf-8')).hexdigest()[:12] + '.png'
     for old in os.listdir(folder):
         if old.startswith(QR_PREFIX) and old != name:
