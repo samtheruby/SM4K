@@ -995,52 +995,6 @@ class Settings(object):
                 if util.CE_SB_LAV_SWITCH else None,
             )
         ),
-        'network': (
-            T(33624, 'Network'), (
-                BoolSetting('local_mode', T(35021, 'Local mode (no plex.tv)'), False)
-                    .description(
-                    T(35029, "Only talk to local Plex Media Servers and never contact plex.tv. "
-                             "Best enabled via \"Go local\" in the user menu, which prepares local user "
-                             "switching while plex.tv is still reachable. Watchlist, Discover and other "
-                             "plex.tv-based features are disabled. Takes full effect after a restart of "
-                             "the addon.")
-                ),
-                OptionsSetting(
-                    'allow_insecure', T(32032), 'never',
-                    (('never', T(32033)), ('same_network', T(32034)), ('always', T(32035)))
-                ).description(
-                    T(32104, 'When to connect to servers with no secure connections...')
-                ),
-                BoolSetting('smart_discover_local', T(33625, 'Smart LAN/local server discovery'), True)
-                    .description(
-                    T(33626, "Checks whether servers returned from Plex.tv are actually local/in your LAN. "
-                             "For specific setups (e.g. Docker) Plex.tv might not properly detect a local "
-                             "server.\n\nNOTE: Only works on Kodi 19 or above."
-                      )
-                ),
-                BoolSetting('prefer_local', T(33627, 'Prefer LAN/local servers over security'), False)
-                    .description(
-                    T(33628, "Prioritizes local connections over secure ones. Needs the proper setting in \"Allow "
-                             "Insecure Connections\" and the Plex Server's \"Secure connections\" at \"Preferred\". "
-                             "Can be used to enforce manual servers."
-                      )
-                ),
-                BoolSetting('gdm_discovery', T(32042, 'Server Discovery (GDM)'), False),
-                OptionsSetting(
-                    'handle_plexdirect', T(32990), 'ask',
-                    (('ask', T(32991)), ('always', T(32035)), ('never', T(32033)))
-                ).description(
-                    T(32992, 'stub')
-                ),
-                BoolSetting(
-                    'force_pd_mapping', T(34038, 'Force plex.direct mapping'), False
-                ).description(T(34039, 'stub')),
-                IPSetting('manual_ip_0', T(32044, 'Connection 1 IP'), ''),
-                IntegerSetting('manual_port_0', T(32045, 'Connection 1 Port'), 32400),
-                IPSetting('manual_ip_1', T(32046, 'Connection 2 IP'), ''),
-                IntegerSetting('manual_port_1', T(32047, 'Connection 2 Port'), 32400),
-            )
-        ),
         'system': (
             T(33600, 'System'), (
                 # Kodi updating the addon while it runs (update_restart.py, LibraryWindow._tickUpdate())
@@ -1192,7 +1146,9 @@ class Settings(object):
         ),
     }
 
-    SECTION_IDS = ('main', 'video', 'audio', 'ui', 'player', 'player_user', 'playback_advanced', 'network', 'system', 'about')
+    # no Network: its settings were how the add-on reached Plex servers; a Silo server is reached at the address it
+    # was added by
+    SECTION_IDS = ('main', 'video', 'audio', 'ui', 'player', 'player_user', 'playback_advanced', 'system', 'about')
 
     def __getitem__(self, key):
         return self.SETTINGS[key]
