@@ -4357,3 +4357,7 @@ msgstr ""
 msgctxt "#35309"
 msgid "Sign in with your password"
 msgstr ""
+
+msgctxt "#35310"
+msgid "Nothing to play."
+msgstr ""

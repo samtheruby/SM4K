@@ -20,6 +20,9 @@ LIBRARY_ROW_PATH = home.ROW_PATH + 'library/'
 CATALOG_PAGE_MAX = 200
 # plexobjects.SEARCHTYPES['collection']: the type a grid's Collections tab asks for
 COLLECTION_TYPE = '18'
+# Plex's episode type: a library's every episode, which Silo's catalog lists as type=episode (Play All's queue,
+# plexnet playqueue.showEpisodes())
+EPISODE_TYPE = '4'
 
 # The sorts Uno's sort menu knows (library_grid.SORT_KEYS) that Silo's catalog sorts by: (Plex key, Silo field, Plex
 # default direction, title). Checked on the user's server: Silo refuses rating, random, last_watched, play_count,
@@ -108,10 +111,14 @@ def catalogListing(client, query, args, offset=None, limit=None):
 
 
 def libraryItems(client, libraryId, args, offset=None, limit=None, memberType=''):
-    """A library's grid: its titles from the catalog, or on the Collections tab (type=18) its collections."""
+    """A library's grid: its titles from the catalog, or on the Collections tab (type=18) its collections; type=4 its
+    episodes."""
     if args.get('type') == COLLECTION_TYPE:
         return collectionsTab(client, libraryId, args, offset, limit, memberType)
-    listing = catalogListing(client, {'source': 'query', 'library_id': libraryId}, args, offset, limit)
+    query = {'source': 'query', 'library_id': libraryId}
+    if args.get('type') == EPISODE_TYPE:
+        query['type'] = 'episode'
+    listing = catalogListing(client, query, args, offset, limit)
     for element in listing:
         element.set('librarySectionID', libraryId)
     return listing

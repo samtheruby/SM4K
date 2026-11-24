@@ -720,8 +720,9 @@ class PrePlayWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils
         preRoll = util.getUserSetting('preplay_preroll', False)
         preRollFirst = util.getUserSetting('preplay_preroll_first', True)
         trailers = 5 - util.getUserSetting('preplay_trailers', 5)
-        # play playqueue if necessary (trailer preplay or plex told us to preplay something)
-        if not resume:
+        # play playqueue if necessary (trailer preplay or plex told us to preplay something); a server without
+        # play queues (Silo) has neither prerolls nor a queue of trailers to ask for
+        if not resume and playqueue.hasPlayQueues(self.video.getServer()):
             if preRoll or trailers:
                 pq = playqueue.createPlayQueueForItem(self.video, use_async=False, method="POST",
                                                           extrasPrefixCount=trailers)
