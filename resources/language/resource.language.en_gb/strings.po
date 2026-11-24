@@ -4361,3 +4361,11 @@ msgstr ""
 msgctxt "#35310"
 msgid "Nothing to play."
 msgstr ""
+
+msgctxt "#35311"
+msgid "Switch server"
+msgstr ""
+
+msgctxt "#35312"
+msgid "Add server"
+msgstr ""

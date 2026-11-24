@@ -95,7 +95,7 @@ class SiloStartupTest(KodiTestCase):
         self.assertEqual(plexapp.ACCOUNT.ID, 'p1')
         self.assertTrue(plexapp.ACCOUNT.isAdmin)
         self.assertEqual(plexapp.SERVERMANAGER.selectedServer.uuid, 'srv-1')
-        stored = json.loads(ENV.settings[silo.CREDENTIALS_SETTING])
+        [stored] = json.loads(ENV.settings[silo.CREDENTIALS_SETTING])  # one session per server
         self.assertEqual((stored['server_id'], stored['access_token'], stored['profile_id']), ('srv-1', 'A1', 'p1'))
 
     def test_change_moves_to_the_new_address(self):
@@ -225,7 +225,7 @@ class SiloStartupTest(KodiTestCase):
 
         self.assertEqual(acct.ID, 'p1')
         self.assertFalse(asksForProfile(acct))
-        self.assertEqual(json.loads(ENV.settings[silo.CREDENTIALS_SETTING])['profile_id'], 'p1')
+        self.assertEqual(json.loads(ENV.settings[silo.CREDENTIALS_SETTING])[0]['profile_id'], 'p1')
 
     def test_code_sign_in_with_one_protected_profile_asks_for_its_pin(self):
         acct = self.signInWith(fullLogin(), profiles(('p1', True)))
@@ -258,3 +258,46 @@ class SiloStartupTest(KodiTestCase):
 
         self.assertIsNone(acct.ID)
         self.assertTrue(asksForProfile(acct))
+
+
+class SiloServerSwitchTest(KodiTestCase):
+    """Start-up after another server was picked (lib/silo.py pickServer()): each server keeps its own session, and
+    giving up on the new one's sign-in opens the server the user came from."""
+
+    def setUp(self):
+        super().setUp()
+        for p in (
+            mock.patch.object(plexapp, 'ACCOUNT', None),
+            mock.patch.object(plexapp, 'SERVERMANAGER', None),
+            mock.patch.object(pnUtil, 'ACCOUNT', None, create=True),
+            mock.patch.object(pnUtil, 'SERVERMANAGER', None, create=True),
+        ):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_each_server_keeps_its_own_session(self):
+        silo.saveCredentials('srv-1', silo.Credentials('A1', 'R1', 'p1'), {'username': 'sam'})
+        silo.saveCredentials('srv-2', silo.Credentials('B1', 'R2', 'p9'), {'username': 'kim'})
+
+        first, firstUser = silo.loadCredentials('srv-1')
+        second, _ = silo.loadCredentials('srv-2')
+
+        self.assertEqual((first.accessToken, first.profileId, firstUser['username']), ('A1', 'p1', 'sam'))
+        self.assertEqual((second.accessToken, second.profileId), ('B1', 'p9'))
+
+    def test_a_session_stored_before_there_were_several_is_still_read(self):
+        ENV.settings[silo.CREDENTIALS_SETTING] = json.dumps(STORED_SESSION)
+
+        self.assertEqual(silo.loadCredentials('srv-1')[0].accessToken, 'A1')
+
+    def test_back_on_the_new_servers_card_returns_to_the_previous_one(self):
+        other = {'base_url': 'http://b.lan:8090', 'server_id': 'srv-2', 'name': 'Silo B'}
+        ENV.settings[silo.SERVERS_SETTING] = json.dumps([STORED, other])  # srv-2 picked: stored last
+        ENV.settings[silo.CREDENTIALS_SETTING] = json.dumps(STORED_SESSION)  # signed in to srv-1 only
+
+        with mock.patch.object(silo, 'signIn', return_value=None) as signIn:  # Back on srv-2's card
+            self.assertTrue(silo.initAfterSwitch('srv-1', session=FakeSession(PROFILES)))
+
+        self.assertEqual(signIn.call_args[0][1], 'http://b.lan:8090')
+        self.assertEqual(plexapp.SERVERMANAGER.selectedServer.uuid, 'srv-1')
+        self.assertEqual(silo.storedServers()[-1].serverId, 'srv-1')

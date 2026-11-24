@@ -95,6 +95,32 @@ def removeServer(serverId):
     saveServers([s for s in storedServers() if s.serverId != serverId])
 
 
+def useServer(serverId):
+    """Make a stored server the one start-up opens: init() opens the one stored last."""
+    servers = storedServers()
+    saveServers([s for s in servers if s.serverId != serverId] + [s for s in servers if s.serverId == serverId])
+
+
+def pickServer(device, session=None):
+    """
+    The user menu's Switch server: the stored servers, the one in use selected, then Add server. The ID of the server
+    in use when the user picked or added another one, which start-up then opens (initAfterSwitch()); else None.
+    """
+    servers = storedServers()
+    current = servers[-1].serverId if servers else None
+    labels = [f'{s.name or s.baseUrl} ({s.baseUrl})' for s in servers] + [T(35312, 'Add server')]
+    choice = xbmcgui.Dialog().select(T(35311, 'Switch server'), labels, preselect=len(servers) - 1)
+    if choice < 0:
+        return None
+    if choice < len(servers):
+        if servers[choice].serverId == current:
+            return None
+        useServer(servers[choice].serverId)
+        return current
+    added = addServerDialog(device, session=session)
+    return current if added is not None and added.serverId != current else None
+
+
 def addServerDialog(device, session=None, address=''):
     """Ask for a Silo server until one answers or the user gives up: its StoredServer, or None. With no address to
     start from, the servers found on the network come first (silonet.discovery), then the address box."""
@@ -187,30 +213,33 @@ def deviceIdentity():
     return DeviceIdentity(pnUtil.X_PLEX_IDENTIFIER, name, 'kodi', util.ADDON.getAddonInfo('version'))
 
 
+def storedSessions():
+    """Each server's stored session by its ID. One stored before there could be several is a single object."""
+    try:
+        data = json.loads(util.getSetting(CREDENTIALS_SETTING, '') or '[]')
+    except ValueError:
+        data = []
+    if isinstance(data, dict):
+        data = [data]
+    return {d.get('server_id'): d for d in data if isinstance(d, dict)} if isinstance(data, list) else {}
+
+
 def saveCredentials(serverId, credentials, user):
-    util.setSetting(
-        CREDENTIALS_SETTING,
-        json.dumps(
-            {
-                'server_id': serverId,
-                'access_token': credentials.accessToken,
-                'refresh_token': credentials.refreshToken,
-                'profile_id': credentials.profileId,
-                'profile_token': credentials.profileToken,
-                'user': {'role': user.get('role'), 'username': user.get('username')},
-            }
-        ),
-    )
+    sessions = storedSessions()
+    sessions[serverId] = {
+        'server_id': serverId,
+        'access_token': credentials.accessToken,
+        'refresh_token': credentials.refreshToken,
+        'profile_id': credentials.profileId,
+        'profile_token': credentials.profileToken,
+        'user': {'role': user.get('role'), 'username': user.get('username')},
+    }
+    util.setSetting(CREDENTIALS_SETTING, json.dumps(list(sessions.values())))
 
 
 def loadCredentials(serverId):
     """The stored session for this server, saved again whenever a refresh rotates it; and the account's user."""
-    try:
-        data = json.loads(util.getSetting(CREDENTIALS_SETTING, '') or '{}')
-    except ValueError:
-        data = {}
-    if not isinstance(data, dict) or data.get('server_id') != serverId:
-        data = {}
+    data = storedSessions().get(serverId) or {}
     user = dict(data.get('user') or {})
     credentials = Credentials(
         data.get('access_token'), data.get('refresh_token'), data.get('profile_id'), data.get('profile_token')
@@ -248,6 +277,15 @@ def changeAddress(stored, device, session=None):
     """Change on the card: the address box pre-filled with the stored address, then start-up again. A new address is
     stored last, which the restart picks; none keeps the card on this one."""
     addServerDialog(device, session=session, address=stored.baseUrl)
+    return init(session)
+
+
+def initAfterSwitch(previousId, session=None):
+    """Start-up on the server just picked (pickServer()). Given up on (Back on its sign-in card, or out of reach),
+    start-up on the one the user came from instead."""
+    if init(session):
+        return True
+    useServer(previousId)
     return init(session)
 
 
