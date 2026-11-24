@@ -9,7 +9,7 @@ import re
 from urllib.parse import parse_qsl
 from xml.etree import ElementTree
 
-from . import home, library
+from . import detail, home, library
 from .client import log
 from .errors import SiloError
 from .items import container
@@ -18,6 +18,8 @@ from .items import container
 SECTION_TYPES = {'movies': 'movie', 'series': 'show'}
 # a library's grid (plexlibrary.LibrarySection.all()) and its sort menu: /library/sections/<library id>/all|sorts
 LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter|filters|genre|contentRating)$')
+# an item's detail (PlexObject.reload())
+METADATA_PATH = re.compile(r'^/library/metadata/([^/]+)$')
 # a collection's titles (plexlibrary.Collection.all(): its key)
 COLLECTION_PATH = re.compile(r'^/library/collections/([^/]+)/children$')
 
@@ -79,6 +81,9 @@ class SiloServer:
                 kwargs.get('limit'),
                 self._libraryTypes.get(libraryPath.group(1), ''),
             )
+        metadataPath = METADATA_PATH.match(route) if handler is None else None
+        if metadataPath:
+            handler = functools.partial(detail.itemDetail, self.client, metadataPath.group(1))
         collectionPath = COLLECTION_PATH.match(route) if handler is None else None
         if collectionPath:
             handler = functools.partial(
