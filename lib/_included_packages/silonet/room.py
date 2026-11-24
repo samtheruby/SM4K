@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from . import ws
 from .client import log
 from .errors import SiloError
+from .items import epoch
 
 PROTOCOL = 'silo.room.v2'
 TICKET = re.compile(r'^[A-Za-z0-9_-]{43}$')
@@ -85,16 +86,6 @@ def create(client):
 def isoTime(seconds):
     # timezone.utc, not datetime.UTC: the add-on runs on Kodi 19's Python 3.8 too (xbmc.python 3.0.0)
     return datetime.fromtimestamp(seconds, timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'  # noqa: UP017
-
-
-def epoch(text):
-    """Seconds since the epoch of an RFC 3339 time (Go writes up to nine fraction digits); None when unreadable."""
-    match = re.match(r'^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)$', text or '')
-    if not match:
-        return None
-    zone = '+00:00' if match.group(3) == 'Z' else match.group(3)
-    whole = datetime.fromisoformat(match.group(1) + zone).timestamp()
-    return whole + float('0.' + match.group(2)) if match.group(2) else whole
 
 
 class RoomSocket:
