@@ -5,6 +5,8 @@ and its versions as Media > Part > Stream. Responses are written inline in the s
 CatalogItemDetail (Silo build-2987); nothing is copied from Silo's sources.
 """
 
+import copy
+
 from plexnet import plexobjects, video  # noqa: F401 (video registers the item types, as the add-on's imports do)
 from silonet.client import Credentials, DeviceIdentity, SiloClient
 from silonet.items import itemElement
@@ -248,6 +250,36 @@ class SiloStreamDetailTest(KodiTestCase):
         subtitles = [s for s in self.part(detail).streams if s.streamType.asInt() == 3]
 
         self.assertEqual([s.languageCode for s in subtitles], ['chi', 'yue'])
+
+    def test_file_info_has_what_silo_gives(self):
+        # pre-play's File info read addedAt, stream bitrates, chroma, sampling rate and the Dolby Vision layers, which
+        # a Silo item lacked: "Added: 12/31/1969", "@ kBit", "Hz"
+        detail = copy.deepcopy(MOVIE)
+        version = detail['versions'][0]
+        version['added_at'] = '2026-11-20T18:54:17.808Z'
+        version['video_tracks'][0].update(
+            pixel_format='yuv420p10le', dv_bl_present=True, dv_rpu_present=True, dv_enhancement_layer='none'
+        )
+        version['audio_tracks'][0].update(bitrate=5200, sample_rate=48000)
+        version['audio_tracks'][1].update(bitrate=640, sample_rate=48000)
+
+        movie = tile(server(FakeSession(FakeResponse(200, detail))), detail).reload()
+
+        streams = movie.media[0].parts[0].streams
+        picture = next(s for s in streams if s.streamType.asInt() == 1)
+        audio = next(s for s in streams if s.streamType.asInt() == 2)
+        self.assertEqual(movie.addedAt.asInt(), 1795200857)
+        self.assertEqual(
+            (
+                picture.bitrate.asInt(),
+                picture.chromaSubsampling,
+                picture.DOVIBLPresent,
+                picture.DOVIELPresent,
+                picture.DOVIRPUPresent,
+            ),
+            (29305 - 5200 - 640, '4:2:0', '1', '0', '1'),
+        )
+        self.assertEqual((audio.bitrate.asInt(), audio.samplingRate.asInt()), (5200, 48000))
 
     def test_dolby_vision_and_hdr_render(self):
         stream = next(s for s in self.part().streams if s.streamType.asInt() == 1)

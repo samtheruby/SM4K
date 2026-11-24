@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 from .client import log
 from .errors import SiloError
-from .items import container, itemElement, ms
+from .items import container, epoch, itemElement, ms
 
 # Silo's resolution to Plex's videoResolution, what Uno's resolution badges read
 RESOLUTIONS = {'2160p': '4k', '4k': '4k', '1440p': '1080', '1080p': '1080', '1080i': '1080', '720p': '720'}
@@ -39,6 +39,13 @@ def element(tag, attrs):
 
 
 def flag(value):
+    """A Plex boolean attribute: "1" when true, absent when false, as Plex writes them (Plex Uno tests some by their
+    text, where "0" would read as true: a non-default track shown as "(default)")."""
+    return '1' if value else None
+
+
+def layer(value):
+    """A Dolby Vision layer's presence for File info: 1 or 0."""
     return '1' if value else '0'
 
 
@@ -149,6 +156,7 @@ def mediaElement(version):
         {
             'id': fileId,
             'key': f'/library/parts/{fileId}/file',
+            'file': version.get('file_path') or version.get('file_name'),
             'duration': duration,
             'size': version.get('file_size'),
             'container': version.get('container'),
@@ -170,6 +178,13 @@ def mediaElement(version):
                 'DOVIProfile': v.get('dv_profile'),
                 'DOVILevel': v.get('dv_level'),
                 'DOVIBLCompatID': v.get('dv_bl_compat_id'),
+                'DOVIBLPresent': layer(v.get('dv_bl_present')) if v.get('dolby_vision') else None,
+                'DOVIELPresent': layer(v.get('dv_enhancement_layer') not in (None, '', 'none'))
+                if v.get('dolby_vision')
+                else None,
+                'DOVIRPUPresent': layer(v.get('dv_rpu_present')) if v.get('dolby_vision') else None,
+                'chromaSubsampling': chroma(v.get('pixel_format')),
+                'bitrate': videoBitrate(version) if n == 0 else None,
                 'colorTrc': v.get('color_transfer'),
                 'colorPrimaries': v.get('color_primaries'),
                 'colorSpace': v.get('color_space'),
@@ -187,6 +202,8 @@ def mediaElement(version):
                 'index': n,
                 'codec': a.get('codec'),
                 'channels': a.get('channels'),
+                'bitrate': a.get('bitrate'),
+                'samplingRate': a.get('sample_rate'),
                 **languageAttrs(a.get('language')),
                 'title': a.get('title'),
                 'displayTitle': a.get('title'),
@@ -290,6 +307,31 @@ def setSeason(root, season):
             root.set(name, str(value))
 
 
+def addedAt(versions):
+    """When the item's first file joined the library, as Plex's addedAt (whole seconds since the epoch); None without."""
+    times = [t for t in (epoch(v.get('added_at')) for v in versions) if t is not None]
+    return int(min(times)) if times else None
+
+
+def chroma(pixelFormat):
+    """A pixel format's chroma subsampling, as Plex names it: yuv420p10le -> 4:2:0."""
+    for name, value in (('yuv420', '4:2:0'), ('yuv422', '4:2:2'), ('yuv444', '4:4:4')):
+        if (pixelFormat or '').startswith(name):
+            return value
+    return None
+
+
+def videoBitrate(version):
+    """The video's kbit/s: the file's, less its audio tracks' (Silo gives no per-track video figure); None when an audio
+    track's isn't known."""
+    total = version.get('bitrate')
+    audio = [a.get('bitrate') for a in version.get('audio_tracks') or []]
+    if not total or None in audio:
+        return None
+    rest = total - sum(audio)
+    return rest if rest > 0 else None
+
+
 def detailElement(detail):
     """The item's full element: its tile's attributes and everything above. None for media Uno has no screens for."""
     root = itemElement(detail)
@@ -306,6 +348,7 @@ def detailElement(detail):
         ('studio', companies[0] if companies else None),
         ('childCount', detail.get('season_count')),
         ('duration', ms(versions[0]['duration']) if versions and versions[0].get('duration') else None),
+        ('addedAt', addedAt(versions)),
     ):
         if value:
             root.set(name, str(value))
