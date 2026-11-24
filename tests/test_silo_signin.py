@@ -33,6 +33,7 @@ def pinWindow():
     window.windowId = 13001
     window.abort = False
     window.closed = False
+    window.setFocusId = lambda controlID: setattr(window, 'focused', controlID)
 
     def doClose():
         window.closed = True
@@ -190,4 +191,19 @@ class SiloSignInTest(KodiTestCase):
 
         self.assertIs(self.signIn(session, window), silo.CHANGE)
         self.assertTrue(session.calls[-1]['url'].endswith('/api/v2/auth/device/cancel'))
+        self.assertTrue(window.closed)
+
+    def test_an_unreachable_server_says_so_with_change_focused(self):
+        window = pinWindow()
+        window.abort = True
+        session = FakeSession()
+        client = SiloClient('http://silo.lan:8090', DEVICE, Credentials(), session=session)
+
+        with mock.patch.object(signin.PinLoginWindow, 'create', return_value=window):
+            self.assertIsNone(silo.signIn(client, 'http://silo.lan:8090', reachable=False))
+
+        props = ENV.window_props[13001]
+        self.assertIn('Could not reach a Silo server at http://silo.lan:8090', props.get('error'))
+        self.assertEqual((window.focused, props.get('password.enabled')), (window.CHANGE_ID, ''))
+        self.assertEqual(session.calls, [])  # nothing asked of a server that isn't there
         self.assertTrue(window.closed)

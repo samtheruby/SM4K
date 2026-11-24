@@ -5,11 +5,13 @@ address after checking that a Silo server answers there.
 
 import json
 from collections import deque
+from unittest import mock
 
 import requests
 from kodienv import ENV
 from silonet import errors
 from silonet.client import DeviceIdentity
+from silonet.discovery import Found
 
 from lib import silo
 
@@ -72,6 +74,32 @@ class StoredServersTest(KodiTestCase):
 
 
 class AddServerDialogTest(KodiTestCase):
+    def setUp(self):
+        super().setUp()
+        self.found = []
+        patch = mock.patch.object(silo.discovery, 'find', side_effect=lambda: self.found)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_servers_found_on_the_network_come_first(self):
+        self.found = [Found('Silo', 'http://silo.lan:8090', '00000000-0000-4000-8000-000000000001')]
+        ENV.dialog_answers = deque([0])
+
+        stored = silo.addServerDialog(DEVICE, session=FakeSession(*silo_answers()))
+
+        self.assertEqual(stored.baseUrl, 'http://silo.lan:8090')
+        select = [c for c in ENV.dialog_calls if c[0] == 'select'][0]
+        self.assertEqual(select[1][1], ['Silo (http://silo.lan:8090)', 'Enter address'])
+        self.assertFalse([c for c in ENV.dialog_calls if c[0] == 'input'])
+
+    def test_enter_address_from_the_list(self):
+        self.found = [Found('Silo', 'http://silo.lan:8090', '00000000-0000-4000-8000-000000000001')]
+        ENV.dialog_answers = deque([1, 'silo.lan:8091'])
+
+        stored = silo.addServerDialog(DEVICE, session=FakeSession(*silo_answers()))
+
+        self.assertEqual(stored.baseUrl, 'http://silo.lan:8091')
+
     def test_dialog_adds_the_server_entered(self):
         ENV.dialog_answers = deque(['silo.lan:8090'])
 

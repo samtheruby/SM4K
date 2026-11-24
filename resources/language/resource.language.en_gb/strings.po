@@ -4345,3 +4345,11 @@ msgstr ""
 msgctxt "#35306"
 msgid "Change"
 msgstr ""
+
+msgctxt "#35307"
+msgid "Enter address"
+msgstr ""
+
+msgctxt "#35308"
+msgid "Silo servers on your network"
+msgstr ""
