@@ -259,6 +259,11 @@ class PlexPlayer(BasePlayer):
         except SiloError as e:
             raise DecisionFailure(e.type, e.detail or e.type)
 
+        # the played file's skip markers and chapters, which the player reads off the item (decision D16)
+        self.item.markers, chapters = server.watchInfo(self.item, part.id)
+        if chapters:
+            self.item.chapters = chapters
+
         timeline = attempt.timeline
         seekable = bool(timeline.get('can_seek_anywhere')) and not timeline.get('stream_origin_seconds')
         obj = util.AttributeDict()

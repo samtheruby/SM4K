@@ -79,7 +79,39 @@ MARKERS = OrderedDict([
         "markerAutoSkipped": False,
         "markerAutoSkipShownTimer": "_creditsSkipShownStarted",
         "markerSkipBtnTimeout": "skipCreditsButtonTimeout"
-    })
+    }),
+    # Silo's recap and next-episode preview markers (decision D16): a recap follows the intro's auto-skip setting
+    # and button, a preview the credits'
+    ("recap", {
+        "marker": None,
+        "name": T(35253, 'Skip recap'),
+        "autoSkipName": T(35254, 'Skipping recap'),
+        "overrideStartOff": None,
+        "countdown": None,
+        "countdown_initial": None,
+        "skipped": False,
+        "hidden": False,
+
+        "markerAutoSkip": "autoSkipIntro",
+        "markerAutoSkipped": False,
+        "markerAutoSkipShownTimer": "_introSkipShownStarted",
+        "markerSkipBtnTimeout": "skipIntroButtonTimeout",
+    }),
+    ("preview", {
+        "marker": None,
+        "name": T(35255, 'Skip preview'),
+        "autoSkipName": T(35256, 'Skipping preview'),
+        "overrideStartOff": None,
+        "countdown": None,
+        "countdown_initial": None,
+        "skipped": False,
+        "hidden": False,
+
+        "markerAutoSkip": "autoSkipCredits",
+        "markerAutoSkipped": False,
+        "markerAutoSkipShownTimer": "_creditsSkipShownStarted",
+        "markerSkipBtnTimeout": "skipCreditsButtonTimeout"
+    }),
 ])
 
 

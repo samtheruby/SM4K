@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 from plexnet.signalsmixin import SignalsMixin
 
-from . import detail, home, library, people, playback, related, shows, trackprefs
+from . import detail, home, library, people, playback, related, shows, trackprefs, watch
 from .client import log
 from .errors import SiloError
 from .items import container
@@ -220,6 +220,21 @@ class SiloServer(SignalsMixin):
         return self.playback.start(
             str(item.ratingKey), part.id, seconds, audioIndex, subtitleIndex, quality, bandwidthCap, hdr
         )
+
+    def watchInfo(self, item, fileId):
+        """The played file's skip markers and chapters (silonet.watch), as plexnet Marker and Chapter lists; empty
+        when Silo can't say."""
+        from plexnet import media, plexobjects
+
+        try:
+            answer = self.client.request('GET', f'/api/v2/watch/{item.ratingKey}') or {}
+        except SiloError as e:
+            log(f'watch info of {item.ratingKey} failed: {e.status} {e.type}')
+            answer = {}
+        root = container(watch.markerElements(answer, fileId) + watch.chapterElements(answer, fileId))
+        markers = plexobjects.PlexItemList(root, media.Marker, media.Marker.TYPE, server=self)
+        chapters = plexobjects.PlexItemList(root, media.Chapter, media.Chapter.TYPE, server=self)
+        return markers, chapters
 
     def themeUrl(self, item):
         """The item's theme song (decision D15) as a short-lived URL (POST .../themes/{id}/playback), or None: no
