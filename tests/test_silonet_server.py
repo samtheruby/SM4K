@@ -86,6 +86,19 @@ class SiloServerTest(KodiTestCase):
         self.assertEqual(len(list(first)), 0)
         self.assertEqual(sum('/hubs/sections/home' in msg for msg, _ in ENV.log_lines), 1)
 
+    def test_pre_plays_more_menu_has_what_silo_does(self):
+        # an admin's More menu read allowsMediaDeletion, which a Silo server lacked: the menu never opened
+        session = FakeSession(FakeResponse(202, {}))
+        srv = server(session)
+
+        srv.query('/library/metadata/movie-1/refresh', method='put')
+
+        self.assertFalse(srv.allowsMediaDeletion)
+        self.assertEqual(
+            (session.calls[0]['method'], session.calls[0]['url']),
+            ('POST', 'http://silo.lan:8090/api/v2/admin/items/movie-1/refresh-metadata'),
+        )
+
     def test_identity_and_urls(self):
         srv = server(FakeSession())
 
