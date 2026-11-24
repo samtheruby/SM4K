@@ -9,7 +9,7 @@ import re
 from urllib.parse import parse_qsl
 from xml.etree import ElementTree
 
-from . import detail, home, library, shows
+from . import detail, home, library, related, shows
 from .client import log
 from .errors import SiloError
 from .items import container
@@ -22,6 +22,8 @@ LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter
 METADATA_PATH = re.compile(r'^/library/metadata/([^/]+)$')
 # a show's seasons or a season's episodes (their key), and a show's every episode (Show.episodes())
 CHILDREN_PATH = re.compile(r'^/library/metadata/([^/]+)/(children|allLeaves)$')
+# a title's Related row (RelatedMixin.getRelated())
+SIMILAR_PATH = re.compile(r'^/library/metadata/([^/]+)/similar$')
 # a collection's titles (plexlibrary.Collection.all(): its key)
 COLLECTION_PATH = re.compile(r'^/library/collections/([^/]+)/children$')
 
@@ -92,6 +94,12 @@ class SiloServer:
         elif childrenPath:
             handler = functools.partial(
                 shows.allLeaves, self.client, childrenPath.group(1), kwargs.get('offset'), kwargs.get('limit')
+            )
+        similarPath = SIMILAR_PATH.match(route) if handler is None else None
+        if similarPath:
+            count = (kwargs.get('params') or {}).get('count') or dict(parse_qsl(queryString)).get('count')
+            handler = functools.partial(
+                related.similar, self.client, similarPath.group(1), count, kwargs.get('offset'), kwargs.get('limit')
             )
         collectionPath = COLLECTION_PATH.match(route) if handler is None else None
         if collectionPath:
