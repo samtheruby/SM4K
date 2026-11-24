@@ -90,6 +90,66 @@ class RoomRequestsTest(KodiTestCase):
         )
         self.assertEqual((joined.snapshot['phase'], joined.token), ('playing', 'proof2'))
 
+    def test_the_host_stages_starts_and_stops(self):
+        lobby = {
+            'room': dict(SNAPSHOT, self_role='host', selected_content_id='movie-tmdb-238'),
+            'room_access_token': 'p2',
+        }
+        session = FakeSession(
+            ok(lobby), ok({'room': dict(lobby['room'], phase='playing')}), ok({'room': lobby['room']})
+        )
+        joined = room.Room({'room': SNAPSHOT, 'room_access_token': 'proof'})
+        client = server(session).client
+
+        joined.stage(client, 'movie-tmdb-238', 4711)
+        joined.start(client)
+        joined.stop(client)
+
+        self.assertEqual(
+            [(c['method'], c['url'].replace(BASE, ''), c['json']) for c in session.calls],
+            [
+                (
+                    'PUT',
+                    '/watch-together/rooms/r1/staged-selection',
+                    {'content_id': 'movie-tmdb-238', 'file_id': '4711'},
+                ),
+                ('POST', '/watch-together/rooms/r1/playback/start', None),
+                ('POST', '/watch-together/rooms/r1/playback/stop', None),
+            ],
+        )
+        self.assertEqual(joined.snapshot['phase'], 'lobby')
+
+    def test_the_host_lets_guests_play_and_pause(self):
+        session = FakeSession(ok({'room': dict(SNAPSHOT, guest_control_policy='guest_play_pause')}))
+        joined = room.Room({'room': SNAPSHOT, 'room_access_token': 'proof'})
+
+        joined.setGuestControl(server(session).client, True)
+
+        self.assertEqual(
+            (session.calls[0]['method'], session.calls[0]['url'], session.calls[0]['json']),
+            ('PATCH', BASE + '/watch-together/rooms/r1/policy', {'guest_control_policy': 'guest_play_pause'}),
+        )
+        self.assertEqual(joined.snapshot['guest_control_policy'], 'guest_play_pause')
+
+    def test_what_a_room_plays_by_name(self):
+        session = FakeSession(
+            ok({'content_id': 'movie-tmdb-238', 'type': 'movie', 'title': 'The Godfather'}),
+            ok(
+                {
+                    'content_id': 'episode-tvdb-78857-1-2',
+                    'type': 'episode',
+                    'title': 'My Name Is Konohamaru!',
+                    'series_title': 'Naruto',
+                    'season_number': 1,
+                    'episode_number': 2,
+                }
+            ),
+        )
+        client = server(session).client
+
+        self.assertEqual(room.titleOf(client, 'movie-tmdb-238'), 'The Godfather')
+        self.assertEqual(room.titleOf(client, 'episode-tvdb-78857-1-2'), 'Naruto · S1E2 · My Name Is Konohamaru!')
+
     def test_a_ticket_needs_the_room_proof(self):
         session = FakeSession(ok(TICKET, 201))
         joined = room.Room({'room': SNAPSHOT, 'room_access_token': 'proof'})

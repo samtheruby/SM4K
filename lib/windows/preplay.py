@@ -566,9 +566,6 @@ class PrePlayWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils
         # a watch party on a Silo server (decision D26): play this for everyone, or end the party this profile hosts
         if hasattr(self.video.server, 'pinnedFiles') and self.video.type in ('episode', 'movie'):
             options.append(('watch_together', T(35260, 'Watch together')))
-            party = watch_together.current(self.video.server)
-            if party is not None and party.party.isHost:
-                options.append(('end_party', T(35269, 'End watch party')))
         # Delete last, wherever it was added (sorted() keeps the rest in order)
         return sorted(options, key=lambda o: o[0] == 'delete')
 
@@ -595,10 +592,6 @@ class PrePlayWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils
             self.delete(confirmed=True)
         elif key == 'watch_together':
             self.watchTogether()
-        elif key == 'end_party':
-            party = watch_together.current()
-            if party is not None:
-                party.leave()
         elif key == 'refresh':
             self.video.refresh()
             self.video.reload(checkFiles=1, **VIDEO_RELOAD_KW)
@@ -762,16 +755,9 @@ class PrePlayWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils
         return True
 
     def watchTogether(self):
-        """Host a watch party playing this (decision D26): the room plays it from the start for everyone, and this
-        plays it here; back from the player, the host is asked whether the party goes on."""
-        session = watch_together.hostItem(self.video, self.video.server.fileId(self.video))
-        if session is None:
-            return
-        self.playVideo(start_over=True)
-        if watch_together.current() is session and optionsdialog.show(
-                T(35271, 'Watch party'), T(35274, 'End the watch party for everyone?'),
-                T(32328, 'Yes'), T(32329, 'No')) == 0:
-            session.leave()
+        """Put this up next in a watch party this profile hosts (decision D26), on the party's screen: members mark
+        themselves ready, and the host starts it for everyone."""
+        watch_together.hostItem(self.video, self.video.server.fileId(self.video), watch_together.playerFor(self))
 
     def openItem(self, control=None, item=None, inherit_from_watchlist=True, server=None, is_watchlisted=False, **kw):
         if not item:

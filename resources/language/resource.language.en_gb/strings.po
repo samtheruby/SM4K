@@ -4173,9 +4173,6 @@ msgctxt "#35262"
 msgid "Party code"
 msgstr ""
 
-msgctxt "#35263"
-msgid "Party code: {0}[CR]Others join from Silo or SM4K with this code."
-msgstr ""
 
 msgctxt "#35264"
 msgid "Waiting for the host to start something..."
@@ -4219,4 +4216,68 @@ msgstr ""
 
 msgctxt "#35274"
 msgid "End the watch party for everyone?"
+msgstr ""
+
+msgctxt "#35275"
+msgid "You stopped watching."
+msgstr ""
+
+msgctxt "#35276"
+msgid "Stop for everyone"
+msgstr ""
+
+msgctxt "#35277"
+msgid "Keep watching"
+msgstr ""
+
+msgctxt "#35278"
+msgid "Nothing picked yet"
+msgstr ""
+
+msgctxt "#35279"
+msgid "Up next: {0}"
+msgstr ""
+
+msgctxt "#35280"
+msgid "Playing: {0}"
+msgstr ""
+
+msgctxt "#35281"
+msgid "{0} of {1} ready"
+msgstr ""
+
+msgctxt "#35282"
+msgid "Start for everyone"
+msgstr ""
+
+msgctxt "#35283"
+msgid "Guests can play and pause"
+msgstr ""
+
+msgctxt "#35284"
+msgid "I'm ready"
+msgstr ""
+
+msgctxt "#35285"
+msgid "Leave watch party"
+msgstr ""
+
+msgctxt "#35286"
+msgid "In the party"
+msgstr ""
+
+msgctxt "#35287"
+msgid "Host"
+msgstr ""
+
+msgctxt "#35288"
+msgid "Ready"
+msgstr ""
+
+msgctxt "#35289"
+msgid "Not ready"
+msgstr ""
+
+msgctxt "#35290"
+msgid "Watch party · {0}"
 msgstr ""

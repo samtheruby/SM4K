@@ -1668,11 +1668,10 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
         # a watch party on a Silo server (decision D26): join one by its code, or end the one this profile hosts
         server = plexapp.SERVERMANAGER.selectedServer
         if hasattr(server, 'pinnedFiles'):
-            party = watch_together.current(server)
-            if party is None:
+            if watch_together.current(server) is None:
                 options.append(('join_party', T(35261, 'Join watch party')))
-            elif party.party.isHost:
-                options.append(('end_party', T(35269, 'End watch party')))
+            else:
+                options.append(('party', T(35271, 'Watch party')))
         if plexapp.ACCOUNT.isSignedIn:
             options.append(('signout', T(32344, 'Sign Out')))
         else:
@@ -1710,12 +1709,6 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
         # (GoHomeMixin.leaveFor(), the Home button's path from a descendant), and Home acts on it
         # as it arrives there (processCommand()).
         self.navigate(navintent.closeSession(option))
-
-    def playPartyItem(self, video, seconds):
-        """A watch party's item, from where the room is (watch_together.joinParty()); returns once it's stopped."""
-        from . import videoplayer
-        video.set('viewOffset', int(seconds * 1000))
-        self.processCommand(videoplayer.play(video=video, resume=seconds >= 1, context=self))
 
     def doUserOption(self, option):
         """Ported from HomeWindow.doUserOption() (home.py) - see quiet-orbiting-heron.md's Cold
@@ -1783,12 +1776,12 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             self._sidebarTarget().setFocusId(self.SECTION_LIST_ID)
             util.setGlobalProperty('update_requested', '1', wait=True)
         elif option == 'join_party':
-            watch_together.joinParty(plexapp.SERVERMANAGER.selectedServer, self.playPartyItem)
+            watch_together.joinParty(plexapp.SERVERMANAGER.selectedServer, watch_together.playerFor(self))
             return
-        elif option == 'end_party':
-            party = watch_together.current()
-            if party is not None:
-                party.leave()
+        elif option == 'party':
+            session = watch_together.current()
+            if session is not None:
+                watch_together.runParty(session, watch_together.playerFor(self))
             return
         elif option == 'refresh_users':
             plexapp.ACCOUNT.updateHomeUsers(refreshSubscription=True)
