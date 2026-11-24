@@ -1,0 +1,133 @@
+"""
+A library's grid from Silo's catalog: SiloServer.query() answers Uno's /library/sections/{key}/all (LibrarySection.all(),
+the grid's count and its chunks) from GET /api/v2/catalog?source=query&library_id=... A chunk is Silo's explicit window
+jump (seek, limit): the grid asks for chunks out of order, and a chunk past Silo's 200-item page is asked in two.
+Responses are written inline in the shape of /api/v2/openapi.json (Silo build-2987).
+"""
+
+from plexnet import plexlibrary, video  # noqa: F401 (video registers the item types, as the add-on's imports do)
+from silonet.client import Credentials, DeviceIdentity, SiloClient
+from silonet.server import SiloServer
+
+from lib.silo import StoredServer
+
+from .base import KodiTestCase, ensure_plex_interface
+from .silonet_fakes import FakeResponse, FakeSession, problem
+
+DEVICE = DeviceIdentity('dev1', 'Living room', 'kodi', '0.4.4')
+LIBRARIES = FakeResponse(
+    200,
+    {
+        'items': [
+            {'id': '2', 'name': '2160p Movies', 'type': 'movies'},
+            {'id': '5', 'name': '2160p Shows', 'type': 'series'},
+        ]
+    },
+)
+
+
+def movie(n):
+    return {
+        'content_id': f'm{n}',
+        'type': 'movie',
+        'title': f'Film {n}',
+        'year': 2000 + n % 20,
+        'poster_url': f'/api/v2/artwork/tmdb/movies/{n}/poster/w500.x',
+        'user_state': {'played': False},
+    }
+
+
+def series(n):
+    return {
+        'content_id': f's{n}',
+        'type': 'series',
+        'title': f'Show {n}',
+        'user_state': {'watched_count': 1, 'unplayed_count': 9},
+    }
+
+
+def page(items, total, start=0):
+    return FakeResponse(
+        200,
+        {
+            'items': items,
+            'total': total,
+            'total_exact': True,
+            'page': {'has_more': start + len(items) < total, 'next_cursor': 'opaque'},
+        },
+    )
+
+
+def server(session):
+    client = SiloClient('http://silo.lan:8090', DEVICE, Credentials(accessToken='A1', profileId='p1'), session=session)
+    return SiloServer(StoredServer('http://silo.lan:8090', 'srv-1', 'Silo'), client)
+
+
+def section(session, index=0):
+    return plexlibrary.Library(None, server=server(session)).sections()[index]
+
+
+class SiloLibraryGridTest(KodiTestCase):
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()  # LibrarySection reads the add-on's preferences through plexnet's interface
+
+    def test_the_grids_count_is_silos_total(self):
+        session = FakeSession(LIBRARIES, page([movie(0)], 216))
+
+        listing = section(session).all(0, 0)
+
+        self.assertEqual(listing.totalSize.asInt(), 216)
+        self.assertEqual(len(listing), 0)
+        call = session.calls[1]
+        self.assertEqual(call['url'], 'http://silo.lan:8090/api/v2/catalog')
+        self.assertEqual((call['params']['source'], call['params']['library_id']), ('query', '2'))
+
+    def test_a_chunk_is_exactly_those_positions(self):
+        session = FakeSession(LIBRARIES, page([movie(n) for n in range(100, 150)], 216, 100))
+
+        items = section(session).all(100, 50)
+
+        self.assertEqual([i.title for i in items], [f'Film {n}' for n in range(100, 150)])
+        self.assertEqual((session.calls[1]['params']['seek'], session.calls[1]['params']['limit']), (100, 50))
+        self.assertEqual(items[0].type, 'movie')
+        self.assertEqual(
+            items[0].defaultThumb.asTranscodedImageURL(300, 450),
+            'http://silo.lan:8090/api/v2/artwork/tmdb/movies/100/poster/w500.x',
+        )
+
+    def test_a_chunk_past_silos_page_size_is_asked_in_two(self):
+        session = FakeSession(
+            LIBRARIES,
+            page([movie(n) for n in range(200)], 216),
+            page([movie(n) for n in range(200, 216)], 216, 200),
+        )
+
+        items = section(session).all(0, 240)
+
+        self.assertEqual([i.title for i in items], [f'Film {n}' for n in range(216)])
+        self.assertEqual(
+            [(c['params']['seek'], c['params']['limit']) for c in session.calls[1:]], [(0, 200), (200, 40)]
+        )
+
+    def test_a_jump_far_down_asks_for_that_window_only(self):
+        session = FakeSession(LIBRARIES, page([movie(n) for n in range(4800, 4840)], 4840, 4800))
+
+        items = section(session).all(4800, 240)
+
+        self.assertEqual(len(session.calls), 2)
+        self.assertEqual(session.calls[1]['params']['seek'], 4800)
+        self.assertEqual(len(items), 40)
+
+    def test_a_series_librarys_items_are_shows(self):
+        session = FakeSession(LIBRARIES, page([series(1), series(2)], 2))
+
+        items = section(session, index=1).all(0, 50)
+
+        self.assertEqual([(i.type, i.title) for i in items], [('show', 'Show 1'), ('show', 'Show 2')])
+        self.assertEqual(session.calls[1]['params']['library_id'], '5')
+
+    def test_a_listing_silo_cant_answer_is_none(self):
+        srv = server(FakeSession(problem(503, 'dependency_unavailable')))
+
+        self.assertIsNone(srv.query('/library/sections/2/all?X-Plex-Container-Start=0&X-Plex-Container-Size=0'))

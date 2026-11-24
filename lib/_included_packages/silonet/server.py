@@ -5,14 +5,21 @@ empty container (logged once): each port phase maps the paths its screens need.
 """
 
 import functools
+import re
+from urllib.parse import parse_qsl
 from xml.etree import ElementTree
 
 from . import home
 from .client import log
 from .errors import SiloError
+from .items import itemElements
 
 # Silo library types to the Plex section types plexlibrary knows; mixed libraries wait for a later phase
 SECTION_TYPES = {'movies': 'movie', 'series': 'show'}
+# a library's grid (plexlibrary.LibrarySection.all()): /library/sections/<library id>/all
+LIBRARY_ALL = re.compile(r'^/library/sections/([^/]+)/all$')
+# the most items /api/v2/catalog answers a request
+CATALOG_PAGE_MAX = 200
 
 
 class SiloConnection:
@@ -51,11 +58,21 @@ class SiloServer:
 
     def query(self, path, method=None, raw=False, **kwargs):
         """The answer to a Plex path as XML; None when Silo couldn't answer (as PlexServer.query returns)."""
-        route = path.split('?', 1)[0].rstrip('/') or '/'
+        route, _, queryString = path.partition('?')
+        route = route.rstrip('/') or '/'
         handler = self._routes.get(route)
         if handler is None and route.startswith(home.ROW_PATH):
             handler = functools.partial(
                 self._homeRow, route[len(home.ROW_PATH) :], kwargs.get('offset'), kwargs.get('limit')
+            )
+        libraryAll = LIBRARY_ALL.match(route) if handler is None else None
+        if libraryAll:
+            handler = functools.partial(
+                self._libraryItems,
+                libraryAll.group(1),
+                dict(parse_qsl(queryString)),
+                kwargs.get('offset'),
+                kwargs.get('limit'),
             )
         if handler is None:
             if route not in self._unmapped:
@@ -76,6 +93,39 @@ class SiloServer:
         page = [] if limit == 0 else items[start : None if limit is None else start + limit]
         root = container(page)
         root.set('totalSize', str(len(items)))
+        return root
+
+    def _libraryItems(self, libraryId, args, offset=None, limit=None):
+        """
+        A library's grid (plexlibrary.LibrarySection.all()) from Silo's catalog: its count (size 0: totalSize alone) or
+        a chunk. A chunk is Silo's explicit window jump (seek=start, limit=size), as the grid asks for chunks out of
+        order; one past CATALOG_PAGE_MAX is asked in pieces. No size: the whole library.
+        """
+        start = int(args.get('X-Plex-Container-Start', offset or 0) or 0)
+        size = args.get('X-Plex-Container-Size', limit)
+        size = None if size is None else int(size)
+        query = {'source': 'query', 'library_id': libraryId}
+        if size == 0:
+            answer = self.client.request('GET', '/api/v2/catalog', params=dict(query, limit=1)) or {}
+            root = container()
+            root.set('totalSize', str(answer.get('total') or 0))
+            return root
+
+        elements, total, position = [], 0, start
+        while size is None or position < start + size:
+            want = CATALOG_PAGE_MAX if size is None else min(start + size - position, CATALOG_PAGE_MAX)
+            answer = self.client.request('GET', '/api/v2/catalog', params=dict(query, seek=position, limit=want)) or {}
+            items = answer.get('items') or []
+            total = answer.get('total') or 0
+            elements += itemElements(items)
+            position += len(items)
+            if len(items) < want or position >= total:
+                break
+        for element in elements:
+            element.set('librarySectionID', libraryId)
+        root = container(elements)
+        root.set('totalSize', str(total))
+        root.set('offset', str(start))
         return root
 
     def _sections(self):
