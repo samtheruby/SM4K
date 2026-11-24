@@ -166,10 +166,12 @@ def startBody(
 class Attempt:
     """One playable attempt: its stream URL and timeline, and its progress and stop."""
 
-    def __init__(self, client, installationId, decision):
+    def __init__(self, client, installationId, decision, request=None):
         plan = decision.get('playback_plan') or {}
         self.client = client
         self.installationId = installationId
+        self.request = request or {}  # the start request: its attempt id, capabilities and context, for a replan
+        self.position = float(self.request.get('start_position') or 0)
         self.sessionId = decision['session_id']
         self.plan = plan
         self.delivery = plan.get('delivery') or ''
@@ -183,7 +185,52 @@ class Attempt:
     def transcoded(self):
         return self.delivery != 'original_http'
 
+    def sidecarUrl(self, source, ref):
+        """A subtitle file's URL from the plan's inventory: the ref-th external file, or the downloaded subtitle
+        whose id is ref. None when the plan lists none."""
+        inventory = (self.plan.get('subtitle') or {}).get('inventory') or []
+        if source == 'external':
+            files = [entry for entry in inventory if entry.get('source') == 'external']
+            entry = files[int(ref)] if str(ref).isdigit() and int(ref) < len(files) else None
+        else:
+            entry = next((e for e in inventory if f'downloaded_subtitle_id={ref}' in (e.get('url') or '')), None)
+        url = (entry or {}).get('url') or ''
+        return (self.client.baseUrl + url if url.startswith('/') else url) or None
+
+    def refresh(self):
+        """The plan again (a track_change replan keeping the audio track): its inventory then lists what Silo stored
+        since, such as a downloaded subtitle. The stream Kodi plays stays as it is."""
+        plan = self.plan
+        body = {
+            'installation_id': self.installationId,
+            'protocol_version': PROTOCOL,
+            'client_features': list(self.request.get('client_features') or ['playback_plan_v3']),
+            'operation': 'track_change',
+            'playback_attempt_id': self.request.get('playback_attempt_id'),
+            'replan_request_id': 'sm4k-' + uuid.uuid4().hex,
+            'failed_plan_id': plan.get('plan_id'),
+            'plan_attempt_id': 'sm4k-' + uuid.uuid4().hex,
+            'plan_attempt_key': plan.get('plan_attempt_key'),
+            'attempted_plan_keys': [plan.get('plan_attempt_key')] if plan.get('plan_attempt_key') else [],
+            'attempt_count': 1,
+            'quality_preference': self.request.get('quality_preference') or 'auto',
+            'position_seconds': round(self.position, 3),
+            'selected_tracks': {k: v for k, v in (plan.get('selected_tracks') or {}).items() if k == 'audio'},
+            'client_capabilities': self.request.get('client_capabilities'),
+            'client_playback_context': self.request.get('client_playback_context'),
+        }
+        try:
+            decision = self.client.request('POST', f'/api/v2/playback/{self.sessionId}/replan', json=body) or {}
+        except SiloError as e:
+            log(f'replan of {self.sessionId} failed: {e.status} {e.type}')
+            return False
+        if decision.get('outcome') != 'playable':
+            return False
+        self.plan = decision.get('playback_plan') or self.plan
+        return True
+
     def _sample(self, seconds, paused):
+        self.position = max(0.0, seconds)
         self.sequence += 1
         return {'sequence': self.sequence, 'position': round(max(0.0, seconds), 3), 'is_paused': bool(paused)}
 
@@ -269,10 +316,17 @@ class Playback:
                 terminal.get('reason') or decision.get('outcome') or '',
                 terminal.get('message') or "Silo can't play this",
             )
-        attempt = Attempt(self.client, body['installation_id'], decision)
+        attempt = Attempt(self.client, body['installation_id'], decision, body)
         self.attempts[key] = attempt
         log(f'playing {key} as {attempt.delivery} ({attempt.plan.get("decision_reason")})')
         return attempt
+
+    def attemptFor(self, fileId):
+        """The attempt playing the file (the latest), or None."""
+        for attempt in reversed(list(self.attempts.values())):
+            if str(attempt.request.get('file_id')) == str(fileId):
+                return attempt
+        return None
 
     def timeline(self, key, state, milliseconds):
         """A player timeline (nowplayingmanager): playing, paused or buffering are progress, stopped stops."""

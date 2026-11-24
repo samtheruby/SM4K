@@ -28,6 +28,8 @@ CHILDREN_PATH = re.compile(r'^/library/metadata/([^/]+)/(children|allLeaves)$')
 SIMILAR_PATH = re.compile(r'^/library/metadata/([^/]+)/similar$')
 # a person, and their titles in the libraries (Role.getDetails(), lib/windows/person.py libraryFilmography())
 PEOPLE_PATH = re.compile(r'^/library/people/([^/]+)(/media)?$')
+# a subtitle file's stream key (silonet.detail), resolved by buildUrl() from the playing attempt's plan
+SUBTITLE_KEY = '/silo/subtitles/'
 # a collection's titles (plexlibrary.Collection.all(): its key)
 COLLECTION_PATH = re.compile(r'^/library/collections/([^/]+)/children$')
 
@@ -71,6 +73,7 @@ class SiloServer(SignalsMixin):
         self._homeCapabilities = None
         self._libraryTypes = {}  # library id -> Plex section type, from the library list (a collection's subtype)
         self.playback = playback.Playback(client, getattr(client.device, 'clientVersion', ''))
+        self._subtitleResults = {}  # a subtitle search result's key -> the result, for its download
 
     def __repr__(self):
         return f'<SiloServer {self.name}>'
@@ -182,6 +185,14 @@ class SiloServer(SignalsMixin):
         return container(sections)
 
     def buildUrl(self, path, includeToken=False):
+        """An absolute URL for a path. A subtitle file's key (silonet.detail: /silo/subtitles/<file>/<source>/<ref>)
+        is the URL the playing attempt's plan lists for it."""
+        if path.startswith(SUBTITLE_KEY):
+            fileId, source, ref = (path[len(SUBTITLE_KEY) :].split('?')[0].split('/') + ['', '', ''])[:3]
+            attempt = self.playback.attemptFor(fileId)
+            url = attempt.sidecarUrl(source, ref) if attempt is not None else None
+            if url:
+                return url
         return path if '://' in path else self.client.baseUrl + path
 
     def getImageTranscodeURL(self, path, width, height, **extraOpts):
@@ -228,6 +239,82 @@ class SiloServer(SignalsMixin):
         seriesId = video is not None and video.TYPE == 'episode' and str(video.get('grandparentRatingKey') or '')
         if seriesId:
             trackprefs.remember(self.client, seriesId, streamType, stream, streams)
+
+    def searchSubtitles(self, video, language='en', hearingImpaired=0, forced=0):
+        """Subtitles for the video's file from Silo's providers (POST /api/v2/subtitles/search), as the Plex
+        SubtitleStreams Plex Uno's download dialog lists (plexnet video.findSubtitles())."""
+        from plexnet import media
+
+        part = _part(video)
+        if part is None:
+            return []
+        body = {'media_file_id': str(part.id), 'languages': [language]}
+        try:
+            answer = self.client.request('POST', '/api/v2/subtitles/search', json=body) or {}
+        except SiloError as e:
+            log(f'subtitle search failed: {e.status} {e.type}')
+            return []
+        found = []
+        for result in answer.get('results') or []:
+            key = f'silo-subtitle:{result.get("id")}'
+            self._subtitleResults[key] = dict(result, media_file_id=str(part.id))
+            attrs = {
+                'key': key,
+                'sourceKey': f'{result.get("provider")}:{result.get("id")}',
+                'providerTitle': result.get('provider') or '',
+                'title': result.get('release_name') or '',
+                'score': str(int(result.get('score') or 0)),
+                'hearingImpaired': '1' if result.get('hearing_impaired') else '0',
+                'forced': '0',
+                'downloaded': '0',
+                'codec': result.get('format') or '',
+                'languageCode': result.get('language') or language,
+            }
+            found.append(media.SubtitleStream(ElementTree.Element('Stream', attrs), server=self))
+        return found
+
+    def downloadSubtitle(self, video, key):
+        """Downloads a search result into Silo (POST /api/v2/subtitles/download) and, while the video plays,
+        refreshes the attempt's plan and adds the subtitle to the video's tracks, selected: the stream returned.
+        None when Silo can't download it, or nothing plays the file."""
+        from plexnet import plexstream
+
+        result = self._subtitleResults.get(key)
+        part = _part(video)
+        if not result or part is None:
+            return None
+        body = {
+            'media_file_id': result['media_file_id'],
+            'provider': result.get('provider'),
+            'subtitle_id': result.get('id'),
+            'language': result.get('language'),
+            'release_name': result.get('release_name') or '',
+            'score': result.get('score') or 0,
+            'hearing_impaired': bool(result.get('hearing_impaired')),
+        }
+        try:
+            stored = (self.client.request('POST', '/api/v2/subtitles/download', json=body) or {}).get('subtitle') or {}
+        except SiloError as e:
+            log(f'subtitle download failed: {e.status} {e.type}')
+            return None
+        attempt = self.playback.attemptFor(result['media_file_id'])
+        if not stored.get('id') or attempt is None or not attempt.refresh():
+            return None
+        attrs = {
+            'streamType': '3',
+            'id': f'{result["media_file_id"]}.d{stored["id"]}',
+            'key': f'{SUBTITLE_KEY}{result["media_file_id"]}/downloaded/{stored["id"]}',
+            'codec': stored.get('format') or 'srt',
+            'title': stored.get('release_name') or '',
+            'displayTitle': stored.get('release_name') or '',
+            **detail.languageAttrs(stored.get('language')),
+        }
+        stream = plexstream.PlexStream(ElementTree.Element('Stream', attrs), server=self)
+        part.streams.append(stream)
+        part._markSelected(3, stream.id)
+        if hasattr(video, '_subtitleStreams'):
+            video._subtitleStreams = None
+        return stream
 
     def findVideoSession(self, sessionId, ratingKey):
         from plexnet import exceptions
@@ -285,3 +372,14 @@ class SiloServer(SignalsMixin):
         from plexnet import plexlibrary
 
         return plexlibrary.Library(self.query('/library/'), server=self)
+
+
+def _part(video):
+    """The part (file) the video plays: its chosen version's, else its first."""
+    choice = getattr(video, 'mediaChoice', None)
+    if choice is not None and getattr(choice, 'part', None) is not None:
+        return choice.part
+    media = video.media() if callable(getattr(video, 'media', None)) else getattr(video, 'media', None)
+    if media and media[0].parts:
+        return media[0].parts[0]
+    return None

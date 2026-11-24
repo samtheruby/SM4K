@@ -196,6 +196,11 @@ def mediaElement(version):
         )
         for n, a in enumerate(audioTracks)
     ]
+    # the file's own subtitle tracks first, in Kodi's order (Plex Uno selects one by its position among them), then
+    # the subtitle files beside the video, whose URLs the attempt's plan lists (SiloServer.buildUrl())
+    subtitles = version.get('subtitle_tracks') or []
+    own = [s for s in subtitles if not s.get('external')]
+    files = [s for s in subtitles if s.get('external')]
     streams += [
         element(
             'Stream',
@@ -203,6 +208,7 @@ def mediaElement(version):
                 'streamType': 3,
                 'id': f'{fileId}.s{s.get("index")}',
                 'index': s.get('index'),
+                'key': f'/silo/subtitles/{fileId}/external/{files.index(s)}' if s.get('external') else None,
                 'codec': s.get('codec'),
                 **languageAttrs(s.get('language')),
                 'title': s.get('title'),
@@ -212,7 +218,7 @@ def mediaElement(version):
                 'default': flag(s.get('default')),
             },
         )
-        for s in version.get('subtitle_tracks') or []
+        for s in own + files
     ]
     part.extend(streams)
     media.append(part)
