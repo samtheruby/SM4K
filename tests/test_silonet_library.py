@@ -367,3 +367,55 @@ class SiloCollectionsTest(KodiTestCase):
 
         self.assertFalse(bar)
         self.assertEqual(len(session.calls), 1)
+
+
+FACETS = FakeResponse(200, {'genres': ['Action', 'Comedy'], 'content_ratings': ['PG', 'PG-13'], 'studios': ['A24']})
+
+
+class SiloLibraryFilterTest(KodiTestCase):
+    """The grid's Filter menu (LibrarySection.listFilters(): /library/sections/<id>/filters; values from
+    listChoices(): /library/sections/<id>/<filter>) offers the filters Silo's catalog takes, with values from
+    GET /api/v2/catalog/filters; a filtered chunk sends Silo's parameter."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+
+    def test_the_menu_offers_genre_and_content_rating(self):
+        filters = section(FakeSession(LIBRARIES)).listFilters(libtype='movie')
+
+        self.assertEqual(
+            [(f.filter, f.filterType) for f in filters], [('genre', 'string'), ('contentRating', 'string')]
+        )
+
+    def test_a_filters_values_are_silos_facets_for_the_library(self):
+        session = FakeSession(LIBRARIES, FACETS)
+
+        values = section(session).listChoices('genre', libtype='movie')
+
+        self.assertEqual([(str(v.key), str(v.title)) for v in values], [('Action', 'Action'), ('Comedy', 'Comedy')])
+        call = session.calls[1]
+        self.assertEqual(call['url'], 'http://silo.lan:8090/api/v2/catalog/filters')
+        self.assertEqual((call['params']['source'], call['params']['library_id']), ('query', '2'))
+        # Silo takes JSON booleans in a query: 'True' (what requests makes of True) is 422
+        self.assertEqual(call['params']['skip_technical'], 'true')
+
+    def test_a_filtered_chunk_and_count_send_silos_parameter(self):
+        session = FakeSession(LIBRARIES, page([movie(1)], 105), page([movie(1)], 105))
+
+        movies = section(session)
+
+        listing = movies.all(0, 0, filter_=('genre', 'Action'))
+        movies.all(0, 50, filter_=('contentRating', 'PG-13'))
+
+        self.assertEqual(listing.totalSize.asInt(), 105)
+        self.assertEqual(session.calls[1]['params']['genre'], 'Action')
+        self.assertEqual(session.calls[2]['params']['content_rating'], 'PG-13')
+
+    def test_no_letters_while_filtered(self):
+        session = FakeSession(LIBRARIES)
+
+        bar = section(session).jumpList(filter_=('genre', 'Action'), sort=('titleSort', 'asc'))
+
+        self.assertFalse(bar)
+        self.assertEqual(len(session.calls), 1)

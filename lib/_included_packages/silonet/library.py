@@ -37,6 +37,16 @@ SORTS = (
 )
 SILO_FIELDS = {key: field for key, field, _, _ in SORTS}
 
+# The value filters Uno's Filter menu offers that Silo's catalog takes: (Plex filter key, catalog parameter, title,
+# GET /api/v2/catalog/filters facet with its values). Silo has no years facet and no unwatched parameter, so Year,
+# Decade and Unplayed aren't offered.
+FILTERS = (
+    ('genre', 'genre', 'Genre', 'genres'),
+    ('contentRating', 'content_rating', 'Content Rating', 'content_ratings'),
+)
+FILTER_PARAMS = {key: param for key, param, _, _ in FILTERS}
+FILTER_FACETS = {key: facet for key, _, _, facet in FILTERS}
+
 
 def catalogSort(plexSort):
     """A grid's sort= ('key:dir', plexlibrary.sortArg()) as Silo's ('field' or '-field'); None for one Silo lacks."""
@@ -74,6 +84,9 @@ def catalogListing(client, query, args, offset=None, limit=None):
     """
     start, size = window(args, offset, limit)
     query = dict(query)
+    for key, param in FILTER_PARAMS.items():
+        if args.get(key):
+            query[param] = args[key]
     sort = catalogSort(args.get('sort'))
     if sort:
         query['sort'] = sort
@@ -158,6 +171,8 @@ def jumpBar(client, libraryId, args):
     """
     if args.get('type') == COLLECTION_TYPE:
         return container()  # Silo's letters count a library's titles, not its collections: no bar on that tab
+    if any(args.get(key) for key in FILTER_PARAMS):
+        return container()  # nor with a filter on: its letters would count the unfiltered list
     order = 'desc' if (args.get('sort') or '').split(',')[0].endswith(':desc') else 'asc'
     answer = client.request('POST', '/api/v2/catalog/letters', json={'library_id': libraryId, 'order': order}) or {}
     runs = answer.get('runs') or []
@@ -199,3 +214,27 @@ def libraryRowItems(client, libraryId, sectionId):
     """Every item element of one library row: GET /api/v2/library/{id}/sections/{section_id}/items."""
     answer = client.request('GET', f'/api/v2/library/{libraryId}/sections/{sectionId}/items')
     return itemElements((answer or {}).get('items'))
+
+
+def filtersContainer(libraryId):
+    """/library/sections/<id>/filters (LibrarySection.listFilters()): one <Directory> per filter Silo's catalog takes,
+    its key the path of its values."""
+    return container(
+        [
+            ElementTree.Element(
+                'Directory',
+                {'filter': key, 'filterType': 'string', 'key': f'/library/sections/{libraryId}/{key}', 'title': title},
+            )
+            for key, _, title, _ in FILTERS
+        ]
+    )
+
+
+def filterChoices(client, libraryId, filterKey):
+    """/library/sections/<id>/<filter> (LibrarySection.listChoices()): the library's values for the filter, from GET
+    /api/v2/catalog/filters, each a <Directory> keyed by the value the catalog takes."""
+    answer = client.request(
+        'GET', '/api/v2/catalog/filters', params={'source': 'query', 'library_id': libraryId, 'skip_technical': 'true'}
+    )
+    values = (answer or {}).get(FILTER_FACETS[filterKey]) or []
+    return container([ElementTree.Element('Directory', {'key': value, 'title': value}) for value in values if value])
