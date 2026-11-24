@@ -213,3 +213,40 @@ class SiloTimelinesTest(KodiTestCase):
 
         self.assertEqual(session.calls[3]['url'], BASE + '/playback/S1/progress')
         self.assertEqual(session.calls[3]['json']['position'], 42.0)
+
+
+class SiloPlayerSeamsTest(KodiTestCase):
+    """What the player's seek dialog asks of the item's server: its signals (the timeline and stream-terminated
+    callbacks it subscribes), and for the playback info panel a Plex transcode session, which Silo has none of."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+
+    def test_signals(self):
+        srv = server(FakeSession())
+        heard = []
+
+        def callback(**kwargs):
+            heard.append(kwargs)
+
+        srv.on('np:timelineResponse', callback)
+        srv.trigger('np:timelineResponse', response='r')
+        srv.off('np:timelineResponse', callback)
+        srv.trigger('np:timelineResponse', response='again')
+
+        self.assertEqual(heard, [{'response': 'r'}])
+
+    def test_no_transcode_session(self):
+        from plexnet import exceptions
+
+        srv = server(FakeSession())
+
+        with self.assertRaises(exceptions.NotFound):
+            srv.findVideoSession('session', 'movie-tmdb-718821')
+        self.assertEqual(list(srv.sessions), [])
+
+    def test_a_stream_urls_token_is_kept_out_of_the_log(self):
+        cleaned = util.cleanToken('http://silo.lan:8090/api/v2/stream/S1?st=eyJhbGci.secret&seek=5')
+
+        self.assertEqual(cleaned, 'http://silo.lan:8090/api/v2/stream/S1?st=****&seek=5')

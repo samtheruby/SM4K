@@ -9,6 +9,8 @@ import re
 from urllib.parse import parse_qsl
 from xml.etree import ElementTree
 
+from plexnet.signalsmixin import SignalsMixin
+
 from . import detail, home, library, people, playback, related, shows
 from .client import log
 from .errors import SiloError
@@ -37,7 +39,7 @@ class SiloConnection:
         self.address = address
 
 
-class SiloServer:
+class SiloServer(SignalsMixin):
     offline = False
     suspect = False
     gone = False
@@ -49,8 +51,12 @@ class SiloServer:
     supportsVideoTranscoding = True
     supportsVideoRemuxOnly = False
     supportsAudioTranscoding = True
+    # the player's playback info panel (seekdialog.py) looks for a Plex transcode session, which Silo has none of
+    anyLANConnection = True
+    sessions = ()
 
     def __init__(self, stored, client):
+        SignalsMixin.__init__(self)  # the seek dialog's timeline and stream-terminated callbacks
         self.stored = stored
         self.client = client
         self.uuid = stored.serverId
@@ -190,6 +196,11 @@ class SiloServer:
         """Starts a Silo attempt for the item's version (part: its Media's Part, whose id is Silo's file id) and
         returns it (silonet.playback.Attempt); PlaybackRefused when Silo decides it can't play."""
         return self.playback.start(str(item.ratingKey), part.id, seconds, audioIndex, subtitleIndex, quality)
+
+    def findVideoSession(self, sessionId, ratingKey):
+        from plexnet import exceptions
+
+        raise exceptions.NotFound  # the panel says the info isn't available
 
     def reportTimeline(self, params):
         """A player timeline (plexnet nowplayingmanager): progress or stop for the item's attempt."""
