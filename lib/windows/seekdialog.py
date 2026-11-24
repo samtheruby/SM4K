@@ -2515,6 +2515,8 @@ class SeekDialog(kodigui.BaseDialog, windowutils.GoHomeMixin, PlexSubtitleDownlo
         local = self.localPreview(offset)
         if local:
             return local, True
+        if hasattr(self.handler.player.playerObject.item.getServer(), 'trickplayIndex'):
+            return None, False  # a Silo file's previews are only the preview store's
         if scanning:
             offset -= offset % self.SCAN_BIF_STEP
         return self.handler.player.playerObject.getBifUrl(offset), False

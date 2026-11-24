@@ -54,3 +54,6 @@ resources/skins/Main/media/script.plex/indicators/player-selection-time_arrow.pn
 lib/windows/filmography.py  # plex.tv Discover's credits screen for a person; SM4K has no plex.tv (D10)
 resources/skins/Main/1080i/templates/script-plex-filmography.xml.tpl  # the Discover credits screen's skin (D10)
 resources/skins/Main/media/script.plex/social/  # social link icons on the person screen, from plex.tv Discover's person details (D10)
+lib/windows/bif_index.py  # Plex's BIF preview index reader; Silo's previews are trickplay sheets (silonet.trickplay, D17)
+tests/test_bif_index.py  # tested lib/windows/bif_index.py (removed)
+docs/preview-thumbnails.md  # the plan for Plex's BIF previews, built as bif_index.py and the BIF download (removed)

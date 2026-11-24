@@ -58,3 +58,8 @@ def chapterElements(answer, fileId):
         )
         for chapter in playedFile(answer, fileId).get('chapters') or []
     ]
+
+
+def hasPreviews(answer, fileId):
+    """Whether the played file has seek-bar previews (silonet.trickplay)."""
+    return bool(playedFile(answer, fileId).get('trickplay_available'))
