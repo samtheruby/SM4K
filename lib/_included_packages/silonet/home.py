@@ -18,8 +18,9 @@ CONTINUE_WATCHING_TYPE = 'continue_watching'
 ROW_PATH = '/hubs/silo/'
 
 
-def hubElement(section):
-    """One home section (with its items) as a Plex <Hub>; its key is the row's own path (SiloServer's route)."""
+def hubElement(section, key=None):
+    """One home section (with its items) as a Plex <Hub>; its key is the row's own path (SiloServer's route), the
+    Home row's unless given."""
     items = itemElements(section.get('items'))
     kinds = {e.get('type') for e in items}
     continueWatching = section.get('section_type') == CONTINUE_WATCHING_TYPE
@@ -36,7 +37,7 @@ def hubElement(section):
             'size': str(len(items)),
             'totalSize': str(section.get('total_count') or len(items)),
             'more': '1' if section.get('has_more') else '0',
-            'key': ROW_PATH + section['id'],
+            'key': key or ROW_PATH + section['id'],
         },
     )
     hub.extend(items)

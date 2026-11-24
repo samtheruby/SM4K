@@ -17,7 +17,9 @@ from .items import container
 # Silo library types to the Plex section types plexlibrary knows; mixed libraries wait for a later phase
 SECTION_TYPES = {'movies': 'movie', 'series': 'show'}
 # a library's grid (plexlibrary.LibrarySection.all()) and its sort menu: /library/sections/<library id>/all|sorts
-LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter)$')
+LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter|filters|genre|contentRating)$')
+# a collection's titles (plexlibrary.Collection.all(): its key)
+COLLECTION_PATH = re.compile(r'^/library/collections/([^/]+)/children$')
 
 
 class SiloConnection:
@@ -44,6 +46,7 @@ class SiloServer:
         self._unmapped = set()
         self._routes = {'/library/sections': self._sections}
         self._homeCapabilities = None
+        self._libraryTypes = {}  # library id -> Plex section type, from the library list (a collection's subtype)
 
     def __repr__(self):
         return f'<SiloServer {self.name}>'
@@ -54,12 +57,14 @@ class SiloServer:
         route = route.rstrip('/') or '/'
         handler = self._routes.get(route)
         if handler is None and route.startswith(home.ROW_PATH):
-            handler = functools.partial(
-                self._homeRow, route[len(home.ROW_PATH) :], kwargs.get('offset'), kwargs.get('limit')
-            )
+            handler = functools.partial(self._row, route, kwargs.get('offset'), kwargs.get('limit'))
         libraryPath = LIBRARY_PATH.match(route) if handler is None else None
         if libraryPath and libraryPath.group(2) == 'sorts':
             handler = library.sortsContainer
+        elif libraryPath and libraryPath.group(2) == 'filters':
+            handler = functools.partial(library.filtersContainer, libraryPath.group(1))
+        elif libraryPath and libraryPath.group(2) in library.FILTER_PARAMS:
+            handler = functools.partial(library.filterChoices, self.client, libraryPath.group(1), libraryPath.group(2))
         elif libraryPath and libraryPath.group(2) == 'firstCharacter':
             handler = functools.partial(
                 library.jumpBar, self.client, libraryPath.group(1), dict(parse_qsl(queryString))
@@ -69,6 +74,17 @@ class SiloServer:
                 library.libraryItems,
                 self.client,
                 libraryPath.group(1),
+                dict(parse_qsl(queryString)),
+                kwargs.get('offset'),
+                kwargs.get('limit'),
+                self._libraryTypes.get(libraryPath.group(1), ''),
+            )
+        collectionPath = COLLECTION_PATH.match(route) if handler is None else None
+        if collectionPath:
+            handler = functools.partial(
+                library.collectionItems,
+                self.client,
+                collectionPath.group(1),
                 dict(parse_qsl(queryString)),
                 kwargs.get('offset'),
                 kwargs.get('limit'),
@@ -84,10 +100,14 @@ class SiloServer:
             log(f'{route} failed: {e.status} {e.type}')
             return None
 
-    def _homeRow(self, sectionId, offset=None, limit=None):
-        """A Home row's items for its See more grid: totalSize is what Silo answers of the row, and a page (offset,
-        limit) is cut from that; limit 0 asks for the count alone."""
-        items = home.rowItems(self.client, sectionId, self.homeCapabilities())
+    def _row(self, route, offset=None, limit=None):
+        """A row's items for its See more grid, a Home row's or a library's (its key, silonet.home/library): totalSize
+        is what Silo answers of the row, and a page (offset, limit) is cut from that; limit 0 asks for the count."""
+        if route.startswith(library.LIBRARY_ROW_PATH):
+            libraryId, _, sectionId = route[len(library.LIBRARY_ROW_PATH) :].partition('/')
+            items = library.libraryRowItems(self.client, libraryId, sectionId)
+        else:
+            items = home.rowItems(self.client, route[len(home.ROW_PATH) :], self.homeCapabilities())
         start = offset or 0
         page = [] if limit == 0 else items[start : None if limit is None else start + limit]
         root = container(page)
@@ -101,6 +121,7 @@ class SiloServer:
             kind = SECTION_TYPES.get(entry.get('type'))
             if kind is None:
                 continue
+            self._libraryTypes[entry['id']] = kind
             sections.append(
                 ElementTree.Element(
                     'Directory',
@@ -135,16 +156,20 @@ class SiloServer:
         pass  # requests' session opens new connections itself after a sleep
 
     def hubs(self, section=None, count=None, search_query=None, section_ids=None, continue_watching_count=None):
-        """Home's rows from Silo's home layout (silonet.home), in Silo's order. A library's rows and search aren't
-        mapped yet: none. Silo's home rows aren't per library, so section_ids doesn't narrow them."""
-        if section or search_query:
+        """Home's rows from Silo's home layout (silonet.home), or a library's (section: its id) from Silo's rows for it
+        (silonet.library), in Silo's order. Search isn't mapped yet: none. Silo's home rows aren't per library, so
+        section_ids doesn't narrow them (D8)."""
+        if search_query:
             return []
         from plexnet import plexlibrary, plexobjects, video  # noqa: F401 (video registers the item types)
 
         try:
-            rows = home.homeRows(self.client, count, continue_watching_count, self.homeCapabilities())
+            if section:
+                rows = library.libraryRows(self.client, section, count)
+            else:
+                rows = home.homeRows(self.client, count, continue_watching_count, self.homeCapabilities())
         except SiloError as e:
-            log(f'home layout failed: {e.status} {e.type}')
+            log(f'{"library" if section else "home"} rows failed: {e.status} {e.type}')
             return []
         root = container(rows)
         hubsContainer = plexobjects.PlexContainer(root, initpath='/hubs', server=self, address='/hubs')
