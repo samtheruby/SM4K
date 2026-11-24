@@ -249,3 +249,47 @@ class SiloHomeRowsTest(KodiTestCase):
         self.assertEqual(server(session).hubs('lib-m', count=20), [])
         self.assertEqual(server(session).hubs(None, search_query='dune'), [])
         self.assertEqual(session.calls, [])
+
+
+class SiloSeeMoreTest(KodiTestCase):
+    """A row's "See more" grid (see_more.HubGridWindow): server.query(hub.key, limit=0) for how many, then
+    plexobjects.listItems(server, hub.key, offset, limit) for each page. Silo answers a row's items from the start,
+    at most section_item_limit_max of them."""
+
+    def row(self, count, total=None):
+        items = [movie(f'm{i}', f'Film {i}') for i in range(count)]
+        total = count if total is None else total
+        return FakeResponse(
+            200, section('s2', 'recently_added', 'Recently Added Movies', items, total=total, more=total > count)
+        )
+
+    def test_a_rows_key_is_its_own_path(self):
+        hubs = homeRows(SiloHomeRowsTest().standard())
+
+        self.assertEqual(hubs[1].key, '/hubs/silo/s2')
+
+    def test_counts_the_rows_items(self):
+        session = FakeSession(CAPS, self.row(57))
+
+        answer = server(session).query('/hubs/silo/s2', limit=0)
+
+        self.assertEqual(answer.get('totalSize'), '57')
+        self.assertEqual(len(answer), 0)
+        self.assertEqual(session.calls[1]['params'], {'item_limit': 100})
+
+    def test_counts_only_what_silo_answers(self):
+        answer = server(FakeSession(CAPS, self.row(100, total=300))).query('/hubs/silo/s2', limit=0)
+
+        self.assertEqual(answer.get('totalSize'), '100')
+
+    def test_a_page(self):
+        from plexnet import plexobjects, video  # noqa: F401 (video registers the item types)
+
+        items = plexobjects.listItems(server(FakeSession(CAPS, self.row(57))), '/hubs/silo/s2', offset=20, limit=10)
+
+        self.assertEqual([i.title for i in items], [f'Film {i}' for i in range(20, 30)])
+
+    def test_a_row_that_fails_has_no_items(self):
+        self.assertIsNone(
+            server(FakeSession(CAPS, problem(503, 'dependency_unavailable'))).query('/hubs/silo/s2', limit=0)
+        )

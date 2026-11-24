@@ -13,6 +13,8 @@ from .errors import SiloError
 # section_ids.CONTINUE_WATCHING_ID: Home merges the row with this identifier across servers
 CONTINUE_WATCHING = 'continueWatching'
 CONTINUE_WATCHING_TYPE = 'continue_watching'
+# a Home row's own path, its <Hub> key: SiloServer.query() answers it for the row's See more grid
+ROW_PATH = '/hubs/silo/'
 
 
 def ms(seconds):
@@ -69,9 +71,13 @@ def itemElement(item):
     return ElementTree.Element('Directory', attrs)
 
 
+def itemElements(items):
+    return [e for e in (itemElement(i) for i in items or []) if e is not None]
+
+
 def hubElement(section):
     """One home section (with its items) as a Plex <Hub>; its key is the row's own path (SiloServer's route)."""
-    items = [e for e in (itemElement(i) for i in section.get('items') or []) if e is not None]
+    items = itemElements(section.get('items'))
     kinds = {e.get('type') for e in items}
     continueWatching = section.get('section_type') == CONTINUE_WATCHING_TYPE
     hub = ElementTree.Element(
@@ -85,7 +91,7 @@ def hubElement(section):
             'size': str(len(items)),
             'totalSize': str(section.get('total_count') or len(items)),
             'more': '1' if section.get('has_more') else '0',
-            'key': '/hubs/silo/' + section['id'],
+            'key': ROW_PATH + section['id'],
         },
     )
     hub.extend(items)
@@ -127,3 +133,14 @@ def homeRows(client, count, continueWatchingCount, capabilities):
                 continue
         rows.append(hubElement(dict(section, **(answer or {}))))
     return rows
+
+
+def rowItems(client, sectionId, capabilities):
+    """Every item element of one Home row that Silo answers: from the start, at most section_item_limit_max."""
+    limit = capabilities.get('section_item_limit_max')
+    answer = client.request(
+        'GET',
+        f'/api/v2/home/sections/{sectionId}/items',
+        params=rowLimit(limit, capabilities, 'section_item_limit_max'),
+    )
+    return itemElements((answer or {}).get('items'))
