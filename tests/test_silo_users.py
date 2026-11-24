@@ -52,3 +52,24 @@ class SiloRefreshUsersTest(KodiTestCase):
 
         self.assertIn('switch', options)
         self.assertNotIn('refresh_users', options)
+
+    def test_a_gone_previous_profile_opens_the_menu_instead_of_restarting(self):
+        # switched from, then removed on Silo: Refresh Users has the list without it
+        ENV.settings['previous_user'] = 'p-gone'
+        self.window.doUserOption = mock.Mock()
+
+        with mock.patch.object(library, 'showOptionsDialog', return_value=None) as dialog:
+            self.window.fastSwitchUser()
+
+        self.window.doUserOption.assert_not_called()  # 'switch' with nothing to pick only reopened Home
+        dialog.assert_called_once()  # the user menu
+        self.assertEqual(ENV.settings.get('previous_user'), '')
+
+    def test_a_pin_protected_previous_profile_asks_for_its_pin(self):
+        self.window.doUserOption('refresh_users')  # p2 (Kids, with a PIN) is listed now
+        ENV.settings['previous_user'] = 'p2'
+        self.window.doUserOption = mock.Mock()
+
+        self.window.fastSwitchUser()
+
+        self.window.doUserOption.assert_called_once_with('switch')
