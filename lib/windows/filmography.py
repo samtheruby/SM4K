@@ -68,7 +68,6 @@ class FilmographyWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowu
     # 911-918, clear of the sidebar's user menu group (901), as Search's are
     TYPE_BUTTON_IDS = tuple(range(911, 919))
     CREDIT_LIST_ID = 101
-    PLAYER_STATUS_BUTTON_ID = 204
 
     def __init__(self, *args, **kwargs):
         kodigui.ControlledWindow.__init__(self, *args, **kwargs)
@@ -168,8 +167,6 @@ class FilmographyWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowu
             return
         if controlID == self.SECTION_LIST_ID:
             self.sectionClicked()
-        elif controlID == self.PLAYER_STATUS_BUTTON_ID:
-            self.showAudioPlayer()
         elif controlID in self.TYPE_BUTTON_IDS:
             self.typeClicked(self.TYPE_BUTTON_IDS.index(controlID))
         elif controlID == self.CREDIT_LIST_ID:

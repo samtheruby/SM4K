@@ -18,7 +18,6 @@ from lib import util  # noqa: E402
 from lib.windows import collection  # noqa: E402
 from lib.windows import kodigui  # noqa: E402
 from lib.windows import library_grid  # noqa: E402
-from lib.windows import tracks  # noqa: E402
 
 from .base import KodiTestCase  # noqa: E402
 
@@ -136,10 +135,7 @@ class GridPanelOnlyTest(SettingsCase):
 
 
 class ScreensOwnItemTest(KodiTestCase):
-    def test_album_and_collection_name_their_own_item(self):
-        album = object.__new__(tracks.AlbumWindow)
-        album.__dict__['album'] = 'the album'
-        self.assertEqual('the album', tracks.AlbumWindow.backgroundItem(album))
+    def test_a_collection_names_its_own_item(self):
         coll = object.__new__(collection.CollectionWindow)
         coll.__dict__['collection'] = 'the collection'
         self.assertEqual('the collection', collection.CollectionWindow.backgroundItem(coll))

@@ -21,7 +21,7 @@ from kodienv import ENV
 
 ENV.abort_requested = True
 from lib.windows import (collection, episodes, genres, kodigui, library, person,  # noqa: E402
-                         preplay, subitems, tracks, windowutils)
+                         preplay, subitems, windowutils)
 
 from .base import KodiTestCase  # noqa: E402
 
@@ -242,7 +242,7 @@ class HostedShellsRouteFirstTest(KodiTestCase):
     that forgot would lose the sidebar popups, Back through the chain and the Home button."""
 
     SHELLS = (preplay.PrePlayWindow, preplay.PrePlayWindowWL, episodes.EpisodesWindow,
-              subitems.ShowWindow, subitems.ArtistWindow, tracks.AlbumWindow,
+              subitems.ShowWindow,
               person.ActorWindow, person.DirectorWindow, collection.CollectionWindow,
               collection.SubDirWindow, genres.GenreBrowserWindow)
 

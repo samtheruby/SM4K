@@ -33,7 +33,6 @@ from . import opener
 from . import videoplayer
 from . import panel_colors
 from . import preplay
-from . import subitems
 from . import sidebar_model
 from .dialog import showOptionsDialog
 from .mixins.watchlist import removeFromWatchlistBlind, autoRemoveFromWatchlistBlind, watchlistRef
@@ -467,8 +466,6 @@ class GridMixin(object):
             self.showPanelClicked()
         elif controlID == self.KEY_LIST_ID:
             self.keyClicked()
-        elif controlID == self.PLAYER_STATUS_BUTTON_ID:
-            self.showAudioPlayer()
         elif controlID == self.PLAY_BUTTON_ID:
             self.playButtonClicked()
         elif controlID == self.SHUFFLE_BUTTON_ID:
@@ -1429,14 +1426,6 @@ class GridMixin(object):
                 # hosting a shell - only self._current, the native window, is).
                 self.openWindow(preplay.PrePlayWindow if not sectionType == 'movies_shows' else preplay.PrePlayWindowWL,
                                  video=datasource, parent_list=self.showPanelControl, **extra_kwargs)
-        elif self.section.TYPE == 'artist' or mli.dataSource.TYPE == 'artist' or mli.dataSource.TYPE == 'album' or mli.dataSource.TYPE == 'track':
-            if self.itemType == 'album' or mli.dataSource.TYPE == 'album' or mli.dataSource.TYPE == 'track':
-                self.openItem(mli.dataSource, entry_section_id=self.entrySectionId)
-            else:
-                # hashed-orbiting-pizza.md Phase 4 item 3: self.openWindow(), not
-                # opener.handleOpen() directly - same reasoning as the PrePlayWindow branch above.
-                self.openWindow(subitems.ArtistWindow, media_item=mli.dataSource, parent_list=self.showPanelControl,
-                                 entry_section_id=self.entrySectionId, entry_from_watchlist=self.entryFromWatchlist)
         elif self.section.TYPE in ('photo', 'photodirectory'):
             self.showPhoto(mli.dataSource)
             # Every other branch only posts a swap (openWindow()), so there's nothing to refresh

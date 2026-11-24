@@ -399,11 +399,6 @@ class BackgroundFillTest(KodiTestCase):
                 # the Recommended view's cover keeps exactly one, to hide the rows under it
                 self.assertEqual(1 if window == "recommended" else 0, len(self.flatLayers(root)))
 
-    def test_the_music_screens_keep_their_static_base(self):
-        for window in ("music_player", "music_current_playlist"):
-            with self.subTest(window=window):
-                self.assertEqual(1, len(self.flatLayers(ET.fromstring(self.rendered[window]))))
-
 
 
 class GridRestoreIndexTest(KodiTestCase):

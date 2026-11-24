@@ -63,7 +63,6 @@ class SearchWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils.
     ENTRY_BOX_ID = 652
     ENTRY_FULL_WIDTH = 414
     BUTTON_A_ID = 1001
-    PLAYER_STATUS_BUTTON_ID = 204
     # The results: one grid, three across (script-plex-search.xml.tpl)
     RESULTS_ID = 2100
     HISTORY_LIST_ID = 2050
@@ -219,8 +218,6 @@ class SearchWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils.
             return
         if controlID == self.SECTION_LIST_ID:
             self.sectionClicked()
-        elif controlID == self.PLAYER_STATUS_BUTTON_ID:
-            self.showAudioPlayer()
         elif controlID == self.SERVERS_BUTTON_ID:
             self.chooseServers()
         elif 1000 < controlID < 1037:
