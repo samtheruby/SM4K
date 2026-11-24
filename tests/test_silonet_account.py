@@ -3,7 +3,10 @@ silonet.account.SiloAccount: the signed-in Silo account in the shape Uno's scree
 Silo's household profiles as its home users (PIN-protected ones verified through /profiles/{id}/verify-pin).
 """
 
+from unittest import mock
+
 import requests
+from plexnet import util as pnUtil
 from silonet import errors
 from silonet.account import SiloAccount
 from silonet.client import Credentials, DeviceIdentity, SiloClient
@@ -125,6 +128,30 @@ class SiloAccountTest(KodiTestCase):
 
         self.assertIsNone(acct.client.credentials.profileToken)
         self.assertFalse(acct.isAuthenticated)
+
+    def test_a_locked_profile_asks_for_its_pin_again(self):
+        """Any request as a PIN-protected profile whose PIN session ended (403 profile_verification_required, its
+        token expired): the token is forgotten, also in the stored session, and Home hears it once."""
+        locked = problem(403, 'profile_verification_required', 'PIN needed')
+        session = FakeSession(PROFILES, locked, locked)
+        acct = account(session, profileId='p2')
+        credentials = acct.client.credentials
+        credentials.profileToken = 'PT2'
+        credentials.onChange = mock.Mock()
+        acct.updateHomeUsers()
+        acct.isAuthenticated = True
+        app = mock.Mock()
+
+        with mock.patch.object(pnUtil, 'APP', app):
+            for _ in range(2):
+                with self.assertRaises(errors.SiloError):
+                    acct.client.request('GET', '/api/v2/user/libraries')
+
+        self.assertIsNone(credentials.profileToken)
+        credentials.onChange.assert_called_with(credentials)
+        self.assertFalse(acct.isAuthenticated)
+        self.assertTrue(acct.isProtected)
+        app.trigger.assert_called_once_with('account:verification_required')
 
     def test_sign_out_revokes_session_and_clears_credentials(self):
         session = FakeSession(FakeResponse(204))

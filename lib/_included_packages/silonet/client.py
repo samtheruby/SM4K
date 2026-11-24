@@ -80,6 +80,7 @@ class SiloClient:
         self.session = session or requests.Session()
         self.timeout = timeout
         self._coolUntil = {}  # (method, path) -> monotonic time: Silo rate-limits per budget, not per client
+        self.onProfileLocked = None  # called on 403 profile_verification_required: the profile's PIN session ended
 
     def request(self, method, path, params=None, json=None, profile=True):
         """The decoded JSON answer, or None for an empty one. Raises a silonet.errors type for every failure."""
@@ -150,4 +151,6 @@ class SiloClient:
             raise SiloUnavailable(status, name, detail, retryAfter(response))
         if status == 401:
             raise SiloAuthError(status, name, detail)
+        if status == 403 and name == 'profile_verification_required' and self.onProfileLocked:
+            self.onProfileLocked()
         raise SiloError(status, name, detail)

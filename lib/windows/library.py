@@ -1828,6 +1828,9 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             # plex.tv answering after the account went offline (MyPlexAccount.scheduleOfflineRetry(), or
             # Offline Mode in the user menu): the Watchlist back in the sidebar
             (plexapp.util.APP, 'account:online', self._postedHandler('onAccountOnline', self.onAccountOnline)),
+            # the acting profile's PIN session ended (SiloAccount.requireVerification(), on a request's thread)
+            (plexapp.util.APP, 'account:verification_required',
+             self._postedHandler('onProfileLocked', self.onProfileLocked)),
         )
         for emitter, signal, handler in self._serverSignalHandlers:
             emitter.on(signal, handler)
@@ -2417,6 +2420,13 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             return
         sidebar_model.refreshWatchlistSection()
         self._rebuildSidebar()
+
+    def onProfileLocked(self, *args, **kwargs):
+        """Silo answered that the acting profile's PIN session ended: Home closes as for Switch User, and main.py's
+        profile picker asks for the PIN."""
+        if self._shuttingDown:
+            return
+        self.doUserOption('switch')
 
     def onServerOnline(self, server=None, **kwargs):
         """A server answers again: its sidebar entries light up (and its libraries are asked for,

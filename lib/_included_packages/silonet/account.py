@@ -4,6 +4,8 @@ its home users; a PIN-protected profile is unlocked with /api/v2/profiles/{id}/v
 X-Profile-Token the client then sends. Silo has no paid tier, so every feature counts as unlocked.
 """
 
+from plexnet import util as pnUtil
+
 from .errors import SiloError
 
 
@@ -30,6 +32,7 @@ class SiloAccount:
 
     def __init__(self, client, user=None):
         self.client = client
+        client.onProfileLocked = self.requireVerification
         self.user = user if user is not None else {}  # shared: sign-in fills it in later
         self.homeUsers = []
         self.switchUser = False
@@ -96,9 +99,19 @@ class SiloAccount:
         return True
 
     def requireVerification(self):
-        """The acting profile's PIN session ended (403 profile_verification_required): ask for the PIN again."""
-        self.client.credentials.profileToken = None
-        self.isAuthenticated = False
+        """
+        The acting profile's PIN session ended (403 profile_verification_required, from any request): its token is
+        forgotten, also in the stored session, and the first time Home hears it (account:verification_required) and
+        closes to the profile picker, which asks for the PIN.
+        """
+        credentials = self.client.credentials
+        credentials.profileToken = None
+        if credentials.onChange:
+            credentials.onChange(credentials)
+        if self.isAuthenticated:
+            self.isAuthenticated = False
+            if pnUtil.APP:
+                pnUtil.APP.trigger('account:verification_required')
 
     def signOut(self, expired=False):
         try:

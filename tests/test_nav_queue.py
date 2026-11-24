@@ -305,7 +305,7 @@ class ServerSignalsTest(KodiTestCase):
             for name in ('displayServerAndUser', 'onServerReachable',
                          'onServerSuspect', 'onServerRecovered', 'onServerOffline',
                          'onServerOnline', 'onServerGone', '_onSleep', '_onWake',
-                         '_onUpdateSourceChanged', 'onAccountOnline'):
+                         '_onUpdateSourceChanged', 'onAccountOnline', 'onProfileLocked'):
                 setattr(host, name, (lambda n: lambda **kw: calls.append((n, kw)))(name))
             host._postedHandler = library.LibraryWindow._postedHandler.__get__(host)
             library.LibraryWindow.hookSignals(host)
@@ -348,6 +348,12 @@ class ServerSignalsTest(KodiTestCase):
             host.runPendingNav(View())
             self.assertEqual(('onAccountOnline', {'account': 'me'}), calls[-1])
 
+            # a profile's PIN session ended (SiloAccount.requireVerification(), on a request's thread): posted
+            app.trigger('account:verification_required')
+            self.assertEqual('onProfileLocked', host._uiPending[-1][0])
+            host.runPendingNav(View())
+            self.assertEqual(('onProfileLocked', {}), calls[-1])
+
             library.LibraryWindow.unhookSignals(host)
             self.assertEqual([], [h for hs in manager.handlers.values() for h in hs])
             self.assertEqual([], [h for hs in app.handlers.values() for h in hs])
@@ -355,6 +361,26 @@ class ServerSignalsTest(KodiTestCase):
             cron.cancelReceiver.assert_called_once_with(host)
         finally:
             library.plexapp.SERVERMANAGER, library.plexapp.util.APP, util.MONITOR, util.CRON = originals
+
+
+class ProfileLockedTest(KodiTestCase):
+    def test_home_closes_to_the_profile_picker(self):
+        """Silo answered that the acting profile's PIN session ended: Home closes as for Switch User, and
+        main.py's profile picker asks for the PIN."""
+        from lib.windows import library
+        host = mock.Mock(_shuttingDown=False)
+
+        library.LibraryWindow.onProfileLocked(host)
+
+        host.doUserOption.assert_called_once_with('switch')
+
+    def test_not_while_home_shuts_down(self):
+        from lib.windows import library
+        host = mock.Mock(_shuttingDown=True)
+
+        library.LibraryWindow.onProfileLocked(host)
+
+        host.doUserOption.assert_not_called()
 
 
 class OpenWindowTest(KodiTestCase):
