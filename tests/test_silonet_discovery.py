@@ -81,7 +81,7 @@ class FakeSocket:
 
     def recvfrom(self, size):
         if not self.datagrams:
-            raise socket.timeout()
+            raise socket.timeout()  # noqa: UP041 (what discovery.find() catches on Python 3.8 too)
         return self.datagrams.pop(0), ('192.168.1.250', 5353)
 
     def close(self):
@@ -98,7 +98,7 @@ class DiscoveryTest(KodiTestCase):
 
         discovery.find(timeout=1, sock=sock)
 
-        (data, address), = sock.sent
+        ((data, address),) = sock.sent
         self.assertEqual(address, ('224.0.0.251', 5353))
         # one question: PTR _silo._tcp.local, class IN, answered to the mDNS group
         self.assertEqual(struct.unpack_from('>6H', data), (0, 0, 1, 0, 0, 0))

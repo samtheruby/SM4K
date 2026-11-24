@@ -33,7 +33,9 @@ def mdnsSocket():
     if hasattr(socket, 'SO_REUSEPORT'):
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
     sock.bind(('', GROUP[1]))
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, socket.inet_aton(GROUP[0]) + socket.inet_aton('0.0.0.0'))
+    sock.setsockopt(
+        socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, socket.inet_aton(GROUP[0]) + socket.inet_aton('0.0.0.0')
+    )
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
     return sock
 
@@ -90,7 +92,7 @@ def find(timeout=1.5, sock=None):
             sock.settimeout(max(0.01, deadline - time.monotonic()))
             try:
                 data = sock.recvfrom(9000)[0]
-            except socket.timeout:
+            except socket.timeout:  # noqa: UP041 (not TimeoutError on Kodi 19's Python 3.8)
                 break
             try:
                 for name, rtype, start, rdata in records(data):
