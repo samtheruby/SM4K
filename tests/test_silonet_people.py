@@ -8,9 +8,13 @@ Responses are written inline in the shape of /api/v2/openapi.json's Person and C
 Importing lib.windows.* starts lib.player's monitor thread unless abort_requested is set first.
 """
 
+from unittest import mock
+
 from kodienv import ENV
 
 ENV.abort_requested = True
+from plexnet import plexapp
+
 from lib.windows import person
 
 from .base import KodiTestCase, ensure_plex_interface
@@ -100,3 +104,40 @@ class SiloPersonTest(KodiTestCase):
 
         self.assertEqual(session.calls[1]['params']['seek'], 1)
         self.assertEqual([i.title for i in items], ['Twisters', 'Normal People'])
+
+
+class NoPlexTvTest(KodiTestCase):
+    """SM4K has no plex.tv (D10): a person's details and titles come from Silo alone, even with a signed-in account
+    and nothing found on the server, which made the screen ask plex.tv's Discover for a biography and credits."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+        account = mock.patch.object(plexapp, 'ACCOUNT', mock.Mock(authToken='token'))
+        account.start()
+        self.addCleanup(account.stop)
+        plexTv = mock.patch('requests.get', side_effect=AssertionError('asked plex.tv'))
+        self.plexTv = plexTv.start()
+        self.addCleanup(plexTv.stop)
+
+    def test_a_person_without_a_biography(self):
+        session = FakeSession(ok(MOVIE), ok(dict(DAISY, bio=None)))
+        role = tile(server(session), MOVIE).reload().roles[0]
+
+        details = role.getDetails()
+
+        self.assertEqual(details['name'], 'Daisy Edgar-Jones')
+        self.plexTv.assert_not_called()
+
+    def test_their_titles(self):
+        session = FakeSession(ok(MOVIE), ok(TITLES))
+        srv = server(session)
+        role = tile(srv, MOVIE).reload().roles[0]
+        got = []
+
+        task = person.PersonFilmographyTask(role, [srv], got.append)
+        task.isCanceled = lambda: False
+        task.run()
+
+        self.assertEqual([i.title for i in got[0]], ['Twisters', 'Normal People'])
+        self.plexTv.assert_not_called()

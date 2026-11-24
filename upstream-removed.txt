@@ -51,3 +51,6 @@ resources/skins/Main/media/script.plex/masks/seekbar-mask-1536.png  # only the m
 resources/skins/Main/media/script.plex/masks/seekbar-mask-1152.png  # only the music player used it (D4)
 resources/skins/Main/media/script.plex/indicators/player-selection-time_box.png  # only the music player used it (D4)
 resources/skins/Main/media/script.plex/indicators/player-selection-time_arrow.png  # only the music player used it (D4)
+lib/windows/filmography.py  # plex.tv Discover's credits screen for a person; SM4K has no plex.tv (D10)
+resources/skins/Main/1080i/templates/script-plex-filmography.xml.tpl  # the Discover credits screen's skin (D10)
+resources/skins/Main/media/script.plex/social/  # social link icons on the person screen, from plex.tv Discover's person details (D10)
