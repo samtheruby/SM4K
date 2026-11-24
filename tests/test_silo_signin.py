@@ -176,3 +176,18 @@ class SiloSignInTest(KodiTestCase):
         self.assertIn('Wrong username or password', props.get('error'))
         self.assertEqual((window.username, window.password, props.get('password')), ('sam', '', ''))
         self.assertNotIn('silo_username', ENV.settings)
+
+    def test_change_asks_for_another_server(self):
+        window = pinWindow()
+        setCode = window.setCode
+
+        def showCode(code):
+            setCode(code)
+            window.onClick(window.CHANGE_ID)
+
+        window.setCode = showCode
+        session = FakeSession(*OPTIONS, started(), FakeResponse(200, {'status': 'canceled'}))
+
+        self.assertIs(self.signIn(session, window), silo.CHANGE)
+        self.assertTrue(session.calls[-1]['url'].endswith('/api/v2/auth/device/cancel'))
+        self.assertTrue(window.closed)

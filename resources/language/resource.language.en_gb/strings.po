@@ -4333,3 +4333,15 @@ msgstr ""
 msgctxt "#35303"
 msgid "Wrong username or password."
 msgstr ""
+
+msgctxt "#35304"
+msgid "Use your phone instead"
+msgstr ""
+
+msgctxt "#35305"
+msgid "Server"
+msgstr ""
+
+msgctxt "#35306"
+msgid "Change"
+msgstr ""

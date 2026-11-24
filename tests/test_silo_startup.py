@@ -95,6 +95,28 @@ class SiloStartupTest(KodiTestCase):
         stored = json.loads(ENV.settings[silo.CREDENTIALS_SETTING])
         self.assertEqual((stored['server_id'], stored['access_token'], stored['profile_id']), ('srv-1', 'A1', 'p1'))
 
+    def test_change_moves_to_the_new_address(self):
+        ENV.settings[silo.SERVERS_SETTING] = json.dumps([STORED])
+        ENV.dialog_answers = deque(['silo.lan:8091'])
+        session = FakeSession(*probeAnswers(), PROFILES)  # the same server (srv-1) at its new address
+
+        with mock.patch.object(silo, 'signIn', side_effect=[silo.CHANGE, approved()]) as signIn:
+            self.assertTrue(silo.init(session=session))
+
+        address = [c for c in ENV.dialog_calls if c[0] == 'input'][0][1][1]
+        self.assertEqual(address, 'http://silo.lan:8090')  # pre-filled with the stored one
+        self.assertEqual([c[0][1] for c in signIn.call_args_list], ['http://silo.lan:8090', 'http://silo.lan:8091'])
+        self.assertEqual([s.baseUrl for s in silo.storedServers()], ['http://silo.lan:8091'])
+
+    def test_change_given_up_shows_the_card_again(self):
+        ENV.settings[silo.SERVERS_SETTING] = json.dumps([STORED])
+        ENV.dialog_answers = deque([''])
+
+        with mock.patch.object(silo, 'signIn', side_effect=[silo.CHANGE, None]) as signIn:
+            self.assertFalse(silo.init(session=FakeSession()))
+
+        self.assertEqual([c[0][1] for c in signIn.call_args_list], ['http://silo.lan:8090'] * 2)
+
     def test_signed_in_single_profile_goes_home(self):
         ENV.settings[silo.SERVERS_SETTING] = json.dumps([STORED])
         ENV.settings[silo.CREDENTIALS_SETTING] = json.dumps(

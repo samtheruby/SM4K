@@ -38,9 +38,10 @@ class PinLoginWindow(kodigui.BaseWindow):
     USERNAME_ID = 201
     PASSWORD_ID = 202
     SIGN_IN_ID = 203
+    CHANGE_ID = 204
 
     # what the user did on the card, read by lib/silo.py's signIn() while it waits
-    abort = submitted = False
+    abort = submitted = change = False
     username = password = ''
 
     def setOptions(self, options, address, username):
@@ -51,6 +52,15 @@ class PinLoginWindow(kodigui.BaseWindow):
         self.setProperty('address', address)
         self.setProperty('username', username)
         self.setProperty('password.enabled', '1' if options.password else '')
+        for name, label in (
+            ('username', util.T(35301, 'Username')),
+            ('password', util.T(35302, 'Password')),
+            ('signin', util.T(32460, 'Sign In')),
+            ('phone', util.T(35304, 'Use your phone instead')),
+            ('server', util.T(35305, 'Server')),
+            ('change', util.T(35306, 'Change')),
+        ):
+            self.setProperty('label.' + name, label)
 
     def showError(self, message):
         """A failed password sign-in: the message, and the password to type again."""
@@ -76,6 +86,8 @@ class PinLoginWindow(kodigui.BaseWindow):
             self.setProperty('password', '\N{BULLET}' * len(self.password))
         elif controlID == self.SIGN_IN_ID:
             self.submitted = True
+        elif controlID == self.CHANGE_ID:
+            self.change = True
 
     def onAction(self, action):
         try:
