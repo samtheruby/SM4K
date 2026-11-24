@@ -76,9 +76,8 @@ class SiloServer(SignalsMixin):
     supportsVideoTranscoding = True
     supportsVideoRemuxOnly = False
     supportsAudioTranscoding = True
-    # the player's playback info panel (seekdialog.py) reads these; the playing item's session comes from
-    # findVideoSession(), as Silo lists no Plex sessions
-    anyLANConnection = True
+    # the player's playback info panel (seekdialog.py) reads this and anyLANConnection; the playing item's session
+    # comes from findVideoSession(), as Silo lists no Plex sessions
     sessions = ()
     # theme music (lib/windows/mixins/thememusic.py) downloads a theme first unless the server is local
     isLocal = False
@@ -105,6 +104,17 @@ class SiloServer(SignalsMixin):
 
     def __repr__(self):
         return f'<SiloServer {self.name}>'
+
+    @property
+    def anyLANConnection(self):
+        """Whether Silo sees this connection as local (GET /api/v2/playback/connection: local, remote or
+        provider:<name>), what the playback info panel's Mode shows as "lan (verified)" or "remote". Not when Silo
+        doesn't say."""
+        try:
+            answer = self.client.request('GET', '/api/v2/playback/connection') or {}
+        except SiloError:
+            return False
+        return answer.get('connection') == 'local'
 
     def query(self, path, method=None, raw=False, **kwargs):
         """The answer to a Plex path as XML; None when Silo couldn't answer (as PlexServer.query returns)."""
