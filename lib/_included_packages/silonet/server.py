@@ -229,6 +229,8 @@ class SiloServer(SignalsMixin):
                         'title': entry.get('name') or '',
                         'type': kind,
                         'thumb': entry.get('poster_url') or '',
+                        # a mixed library's grid is a film library's; its count says "Movies & Shows" (library_grid)
+                        **({'mixed': '1'} if entry.get('type') == 'mixed' else {}),
                     },
                 )
             )
