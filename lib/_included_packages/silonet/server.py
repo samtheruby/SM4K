@@ -9,7 +9,7 @@ import re
 from urllib.parse import parse_qsl
 from xml.etree import ElementTree
 
-from . import detail, home, library, related, shows
+from . import detail, home, library, people, related, shows
 from .client import log
 from .errors import SiloError
 from .items import container
@@ -24,6 +24,8 @@ METADATA_PATH = re.compile(r'^/library/metadata/([^/]+)$')
 CHILDREN_PATH = re.compile(r'^/library/metadata/([^/]+)/(children|allLeaves)$')
 # a title's Related row (RelatedMixin.getRelated())
 SIMILAR_PATH = re.compile(r'^/library/metadata/([^/]+)/similar$')
+# a person, and their titles in the libraries (Role.getDetails(), lib/windows/person.py libraryFilmography())
+PEOPLE_PATH = re.compile(r'^/library/people/([^/]+)(/media)?$')
 # a collection's titles (plexlibrary.Collection.all(): its key)
 COLLECTION_PATH = re.compile(r'^/library/collections/([^/]+)/children$')
 
@@ -100,6 +102,11 @@ class SiloServer:
             count = (kwargs.get('params') or {}).get('count') or dict(parse_qsl(queryString)).get('count')
             handler = functools.partial(
                 related.similar, self.client, similarPath.group(1), count, kwargs.get('offset'), kwargs.get('limit')
+            )
+        peoplePath = PEOPLE_PATH.match(route) if handler is None else None
+        if peoplePath:
+            handler = functools.partial(
+                people.media if peoplePath.group(2) else people.person, self.client, peoplePath.group(1)
             )
         collectionPath = COLLECTION_PATH.match(route) if handler is None else None
         if collectionPath:

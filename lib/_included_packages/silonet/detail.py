@@ -79,11 +79,18 @@ def ratingElements(detail):
 
 
 def personElements(detail):
-    """Cast as <Role>, crew as <Director>/<Writer>/<Producer>, each with its Silo person id and photo."""
+    """Cast as <Role>, crew as <Director>/<Writer>/<Producer>, each with its Silo person id and photo. The id is also
+    its tagKey, the key the person screen asks every server by (lib/windows/person.py personKey())."""
     people = [
         element(
             'Role',
-            {'tag': p.get('name'), 'role': p.get('character'), 'id': p.get('person_id'), 'thumb': p.get('photo_url')},
+            {
+                'tag': p.get('name'),
+                'role': p.get('character'),
+                'id': p.get('person_id'),
+                'tagKey': p.get('person_id'),
+                'thumb': p.get('photo_url'),
+            },
         )
         for p in detail.get('cast') or []
     ]
@@ -97,7 +104,17 @@ def personElements(detail):
             else ('Producer' if job in PRODUCER_JOBS else None)
         )
         if tag:
-            people.append(element(tag, {'tag': p.get('name'), 'id': p.get('person_id'), 'thumb': p.get('photo_url')}))
+            people.append(
+                element(
+                    tag,
+                    {
+                        'tag': p.get('name'),
+                        'id': p.get('person_id'),
+                        'tagKey': p.get('person_id'),
+                        'thumb': p.get('photo_url'),
+                    },
+                )
+            )
     return people
 
 
