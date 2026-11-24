@@ -198,3 +198,15 @@ class SiloShutdownTest(KodiTestCase):
             plexapp.App().preShutdown()
 
         self.assertTrue(session.closed)
+
+    def test_add_on_exit_before_sign_in(self):
+        """Back on the sign-in screen ends the add-on before silo.init() sets a server manager. On the user's Kodi box
+        preShutdown() then raised AttributeError, leaving the add-on's running markers set, so its next start was
+        refused."""
+        from plexnet import http, plexapp
+
+        with (
+            mock.patch.object(plexapp, 'SERVERMANAGER', None),
+            mock.patch.object(http.HttpRequest, '_cancel', False),
+        ):
+            plexapp.App().preShutdown()  # raises nothing
