@@ -47,13 +47,11 @@ class SearchWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils.
     height = 1080
 
     LETTERS = 'abcdefghijklmnopqrstuvwxyz0123456789 '
-    # The type buttons: 911-916
+    # The type buttons: 911-913 and 916 (Silo has no music or photos, D4: 914 and 915 went with them)
     SECTION_BUTTONS = {
         911: 'all',
         912: 'movie',
         913: 'show',
-        914: 'artist',
-        915: 'photo',
         916: 'people',
     }
 
@@ -779,13 +777,11 @@ class SearchWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils.
     SECTION_TYPES = {
         'movie': ('movie', 'collection'),
         'show': ('show', 'season', 'episode', 'collection'),
-        'artist': ('artist', 'album', 'track', 'collection'),
-        'photo': ('photo', 'photodirectory'),
         'people': ('actor', 'director'),
     }
     # The library type (librarySectionType) whose collections each type button shows, and a
     # collection's stand-in art by it
-    COLLECTION_LIBRARY_TYPES = {'movie': '1', 'show': '2', 'artist': '8'}
+    COLLECTION_LIBRARY_TYPES = {'movie': '1', 'show': '2'}
     COLLECTION_FALLBACKS = {'1': 'movie', '2': 'show', '8': 'music'}
 
     def showHubs(self, hubs):

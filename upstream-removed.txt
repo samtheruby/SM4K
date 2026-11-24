@@ -57,3 +57,5 @@ resources/skins/Main/media/script.plex/social/  # social link icons on the perso
 lib/windows/bif_index.py  # Plex's BIF preview index reader; Silo's previews are trickplay sheets (silonet.trickplay, D17)
 tests/test_bif_index.py  # tested lib/windows/bif_index.py (removed)
 docs/preview-thumbnails.md  # the plan for Plex's BIF previews, built as bif_index.py and the BIF download (removed)
+resources/skins/Main/media/script.plex/home/type/artist.png  # Search's Music button and music sections' sidebar icon; Silo has no music (D4)
+resources/skins/Main/media/script.plex/home/type/photo.png  # Search's Photos button and photo sections' sidebar icon; Silo has no photos (D4)
