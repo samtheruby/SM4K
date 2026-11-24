@@ -9,7 +9,7 @@ import re
 from urllib.parse import parse_qsl
 from xml.etree import ElementTree
 
-from . import detail, home, library, people, related, shows
+from . import detail, home, library, people, playback, related, shows
 from .client import log
 from .errors import SiloError
 from .items import container
@@ -44,6 +44,11 @@ class SiloServer:
     owned = True
     platform = 'silo'
     pendingReachabilityRequests = 0  # Plex's connection tests; a Silo server has one address
+    # What Plex Uno's media decision engine asks a server (plexnet mediadecisionengine.py). Silo decides each attempt
+    # itself (silonet.playback), so these only let the engine pick a version and its tracks.
+    supportsVideoTranscoding = True
+    supportsVideoRemuxOnly = False
+    supportsAudioTranscoding = True
 
     def __init__(self, stored, client):
         self.stored = stored
@@ -55,6 +60,7 @@ class SiloServer:
         self._routes = {'/library/sections': self._sections}
         self._homeCapabilities = None
         self._libraryTypes = {}  # library id -> Plex section type, from the library list (a collection's subtype)
+        self.playback = playback.Playback(client, getattr(client.device, 'clientVersion', ''))
 
     def __repr__(self):
         return f'<SiloServer {self.name}>'
@@ -173,6 +179,21 @@ class SiloServer:
 
     def isReachable(self, onlySupported=True):
         return True
+
+    def isLocalConnection(self):
+        return True  # Silo applies its own local and remote stream limits to each attempt
+
+    def supportsFeature(self, feature):
+        return False  # Plex server features (transcoder, BIF indexes); Silo's are asked of it directly
+
+    def startPlayback(self, item, part, seconds=0.0, audioIndex=None, subtitleIndex=None, quality='auto'):
+        """Starts a Silo attempt for the item's version (part: its Media's Part, whose id is Silo's file id) and
+        returns it (silonet.playback.Attempt); PlaybackRefused when Silo decides it can't play."""
+        return self.playback.start(str(item.ratingKey), part.id, seconds, audioIndex, subtitleIndex, quality)
+
+    def reportTimeline(self, params):
+        """A player timeline (plexnet nowplayingmanager): progress or stop for the item's attempt."""
+        self.playback.timeline(str(params.get('ratingKey')), params.get('state'), params.get('time'))
 
     def updateReachability(self, force=True, allowFallback=False):
         pass  # no connection to test: a request that fails says so itself

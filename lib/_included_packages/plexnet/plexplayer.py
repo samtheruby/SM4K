@@ -98,6 +98,8 @@ class PlexPlayer(BasePlayer):
         return self._build(directPlay, "playback_remux" in features, features=features)
 
     def _build(self, directPlay=None, directStream=True, currentPartIndex=None, features=None):
+        if hasattr(self.item.getServer(), 'startPlayback'):
+            return self._buildSilo(self.item.getServer())
         isForced = directPlay is not None
         if isForced:
             util.LOG(directPlay and "Forced Direct Play" or "Forced Transcode; allowDirectStream={0}".format(directStream))
@@ -226,6 +228,54 @@ class PlexPlayer(BasePlayer):
 
         return self.metadata
 
+    def _buildSilo(self, server):
+        """A Silo server's attempt (silonet.playback): its plan's stream is the URL - for nearly every file the
+        original, which Kodi plays and seeks itself. A plan whose timeline Kodi can seek on its own (the original, or
+        a transcode with the whole timeline) plays as a direct play; one whose window is still growing (a copy remux)
+        as a transcode, which starts a new attempt where a seek lands."""
+        from silonet.errors import SiloError
+        from silonet.playback import PlaybackRefused
+
+        part = self.media.parts[0]
+        position = self.seekValue
+        if position > 0:
+            position = max(0, position + self.item.settings.getPreference("resume_offset", -3500))
+        audio = self.choice.audioStream
+        subtitle = None if self.shouldSuppressSubtitleForAudioLanguage() else self.choice.subtitleStream
+        try:
+            attempt = server.startPlayback(self.item, part, position / 1000.0,
+                                           audio.index.asInt() if audio else None,
+                                           subtitle.index.asInt() if subtitle and not subtitle.index.asInt() < 0
+                                           else None)
+        except PlaybackRefused as e:
+            raise DecisionFailure(e.reason, e.message)
+        except SiloError as e:
+            raise DecisionFailure(e.type, e.detail or e.type)
+
+        timeline = attempt.timeline
+        seekable = bool(timeline.get('can_seek_anywhere')) and not timeline.get('stream_origin_seconds')
+        obj = util.AttributeDict()
+        obj.duration = self.media.duration.asInt()
+        obj.fullHD = self.media.getVideoResolution() >= 1080
+        obj.streamQualities = obj.fullHD and ["HD"] or ["SD"]
+        obj.live = False
+        obj.partIndex = 0
+        obj.startOffset = 0
+        obj.partDuration = part.duration.asInt() or obj.duration
+        obj.path = ''
+        obj.size = part.size and int(part.size) or ''
+        obj.isMapped = False
+        obj.isRequestToServer = True
+        obj.isTranscoded = not (attempt.delivery == 'original_http' or seekable)
+        obj.streamUrls = [attempt.url]
+        obj.playStart = int(timeline.get('player_start_seconds') or 0)
+        if subtitle and attempt.delivery == 'original_http' \
+                and self.choice.subtitleDecision == self.choice.SUBTITLES_SOFT_DP:
+            obj.subtitleConfig = {'TrackName': "mkv/" + str(subtitle.index.asInt() + 1)}
+        self.metadata = obj
+        util.LOG("Constructed Silo video item for playback: {0}", util.cleanObjTokens(dict(obj)))
+        return self.metadata
+
     @property
     def startOffset(self):
         return self.metadata and self.metadata.startOffset or 0
@@ -262,6 +312,8 @@ class PlexPlayer(BasePlayer):
         return False
 
     def getServerDecision(self):
+        if hasattr(self.item.getServer(), 'startPlayback'):
+            return self  # Silo decided when the attempt started
         directPlay = not (self.metadata and self.metadata.isTranscoded)
         decisionPath = self.getDecisionPath(directPlay)
         newDecision = None
