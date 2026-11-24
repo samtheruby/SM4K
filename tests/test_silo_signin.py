@@ -3,6 +3,7 @@ lib/silo.py signIn(): the sign-in card (Uno's PIN window): the server's name and
 Silo's sign-in code and link, until a password sign-in works or someone approves the code.
 """
 
+import os
 from collections import deque
 from unittest import mock
 
@@ -59,6 +60,31 @@ class SiloSignInTest(KodiTestCase):
         client = SiloClient('http://silo.lan:8090', DEVICE, Credentials(), session=session)
         with mock.patch.object(signin.PinLoginWindow, 'create', return_value=window):
             return silo.signIn(client, 'http://silo.lan:8090')
+
+    def test_qr_image_is_a_png_in_kodis_temp_folder(self):
+        path = signin.qrImage('http://silo.lan:8090/4821-7730?code=4821-7730')
+
+        self.assertEqual(os.path.dirname(path), ENV.temp_dir)
+        with open(path, 'rb') as f:
+            self.assertEqual(f.read(8), b'\x89PNG\r\n\x1a\n')
+
+    def test_a_new_code_replaces_the_old_qr_image(self):
+        first = signin.qrImage('http://silo.lan:8090/4821-7730?code=4821-7730')
+
+        second = signin.qrImage('http://silo.lan:8090/1111-2222?code=1111-2222')
+
+        # a new name each time: Kodi caches an image by its path
+        self.assertNotEqual(first, second)
+        self.assertFalse(os.path.exists(first))
+        self.assertTrue(os.path.exists(second))
+
+    def test_the_card_shows_the_codes_qr(self):
+        window = pinWindow()
+        code = auth.DeviceCode(started().json())
+
+        window.setCode(code)
+
+        self.assertEqual(ENV.window_props[13001].get('qr'), signin.qrImage(code.verificationUriComplete))
 
     def test_code_window_shows_spaced_code_and_link(self):
         window = pinWindow()

@@ -1,9 +1,30 @@
 from __future__ import absolute_import
 
-from kodi_six import xbmcgui
+import hashlib
+import os
+
+from kodi_six import xbmcgui, xbmcvfs
 
 from lib import util
 from . import kodigui
+
+
+QR_PREFIX = 'silomod_qr_'
+
+
+def qrImage(text):
+    """A PNG of text's QR code in Kodi's temp folder, for the card's image; the one before it is deleted. Each text
+    gets its own name, as Kodi caches an image by its path."""
+    import segno
+
+    folder = xbmcvfs.translatePath('special://temp')
+    name = QR_PREFIX + hashlib.sha1(text.encode('utf-8')).hexdigest()[:12] + '.png'
+    for old in os.listdir(folder):
+        if old.startswith(QR_PREFIX) and old != name:
+            os.remove(os.path.join(folder, old))
+    path = os.path.join(folder, name)
+    segno.make_qr(text).save(path, scale=10, border=2)
+    return path
 
 
 class PinLoginWindow(kodigui.BaseWindow):
@@ -44,6 +65,7 @@ class PinLoginWindow(kodigui.BaseWindow):
         self.setProperty('instructions', util.T(35243, 'On a phone or computer, open {link} and enter this code:').format(
             link=code.verificationUri))
         self.setProperty('pin', formatUserCode(code.userCode))
+        self.setProperty('qr', qrImage(code.verificationUriComplete))
 
     def onClick(self, controlID):
         if controlID == self.USERNAME_ID:
