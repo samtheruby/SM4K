@@ -83,9 +83,11 @@ def hubElement(section):
     hub = ElementTree.Element(
         'Hub',
         {
+            # the section id before its type: Home keys rows by getCleanHubIdentifier(), which strips trailing
+            # numeric parts, and Silo's ids are numbers
             'hubIdentifier': CONTINUE_WATCHING
             if continueWatching
-            else f'silo.{section["section_type"]}.{section["id"]}',
+            else f'silo.{section["id"]}.{section["section_type"]}',
             'title': section.get('title') or '',
             'type': kinds.pop() if len(kinds) == 1 else 'mixed',
             'size': str(len(items)),

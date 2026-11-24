@@ -210,6 +210,19 @@ class SiloHomeRowsTest(KodiTestCase):
         self.assertEqual(ep.grandparentThumb, '/api/v2/artwork/tvdb/series/2/poster/w500.def')
         self.assertEqual(ep.viewOffset.asInt(), 900000)
 
+    def test_two_rows_of_one_kind_stay_two_rows(self):
+        """Home keys its rows by getCleanHubIdentifier(), which strips trailing numbers, and Silo's section ids are
+        numbers: on the user's box both Recently Added rows became one."""
+        rows = [
+            section('152896533422071873', 'recently_added', 'Recently Added Movies', [movie('m1', 'Dune')]),
+            section('152896533422137409', 'recently_added', 'Recently Added TV', [series('t1', 'Andor', 0, 1)]),
+        ]
+        session = FakeSession(CAPS, FakeResponse(200, {'sections': rows, 'included_sections': rows}))
+
+        ids = [h.getCleanHubIdentifier(is_home=True) for h in homeRows(session)]
+
+        self.assertEqual(len(set(ids)), 2, ids)
+
     def test_audiobooks_ebooks_and_podcasts_are_left_out(self):
         other = [dict(movie('b1', 'Book'), type=kind) for kind in ('audiobook', 'ebook', 'podcast', 'podcast_episode')]
         session = FakeSession(
