@@ -1,6 +1,8 @@
 # Most of this is ported from Roku code and much of it is currently unused
 # TODO: Perhaps remove unnecessary code
 from __future__ import absolute_import
+import queue
+import threading
 import time
 
 from . import util
@@ -79,6 +81,8 @@ class NowPlayingManager(object):
 
         # timeline reports sent and not answered yet (waitForTimelines())
         self._pendingTimelines = set()
+        # a Silo server's reports, sent in order by one worker (_toSilo())
+        self._siloReports = None
 
         # Initialization
         self.reset()
@@ -167,6 +171,10 @@ class NowPlayingManager(object):
         if timeline.playQueue:
             params["playQueueItemID"] = timeline.playQueue.selectedId
 
+        if hasattr(server, 'reportTimeline'):
+            self._toSilo(server, params)
+            return
+
         path = "/:/timeline"
         for paramKey in params:
             if params[paramKey]:
@@ -180,6 +188,28 @@ class NowPlayingManager(object):
         self._pendingTimelines.add(token)
         if not util.APP.startRequest(request, context):
             self._pendingTimelines.discard(token)
+
+    def _toSilo(self, server, params):
+        """A Silo server's timeline (SiloServer.reportTimeline(): its attempt's progress or stop), off the player's
+        thread and in order, by one worker; waitForTimelines() waits for it as for Plex's."""
+        token = object()
+        self._pendingTimelines.add(token)
+        if self._siloReports is None:
+            self._siloReports = queue.Queue()
+            worker = threading.Thread(target=self._sendSiloReports, name='silo.timelines')
+            worker.daemon = True
+            worker.start()
+        self._siloReports.put((server, dict(params), token))
+
+    def _sendSiloReports(self):
+        while True:
+            server, params, token = self._siloReports.get()
+            try:
+                server.reportTimeline(params)
+            except Exception as e:
+                util.WARN_LOG("NowPlaying: Silo timeline failed: {0}".format(e))
+            finally:
+                self._pendingTimelines.discard(token)
 
     def waitForTimelines(self, timeout):
         """Until every timeline report sent has been answered, or timeout seconds. Back from
