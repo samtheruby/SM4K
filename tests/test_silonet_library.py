@@ -131,3 +131,51 @@ class SiloLibraryGridTest(KodiTestCase):
         srv = server(FakeSession(problem(503, 'dependency_unavailable')))
 
         self.assertIsNone(srv.query('/library/sections/2/all?X-Plex-Container-Start=0&X-Plex-Container-Size=0'))
+
+
+class SiloLibrarySortTest(KodiTestCase):
+    """The grid's sort menu (LibraryWindow.serverSortOptions(): /library/sections/<id>/sorts) offers what Silo's
+    catalog sorts by, and a sorted chunk asks Silo for that sort ('field' or '-field')."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+
+    def test_the_menu_offers_what_silo_sorts_by(self):
+        sorts = section(FakeSession(LIBRARIES)).listSorts(libtype='movie')
+
+        self.assertEqual(
+            [(s.key, s.defaultDirection) for s in sorts],
+            [
+                ('titleSort', 'asc'),
+                ('addedAt', 'desc'),
+                ('originallyAvailableAt', 'desc'),
+                ('year', 'desc'),
+                ('rating', 'desc'),
+                ('audienceRating', 'desc'),
+                ('contentRating', 'asc'),
+                ('duration', 'desc'),
+                ('viewOffset', 'desc'),
+            ],
+        )
+
+    def test_a_sorted_chunk_asks_silo_for_that_sort(self):
+        session = FakeSession(LIBRARIES, page([movie(1)], 1))
+
+        section(session).all(0, 50, sort=('addedAt', 'desc'))
+
+        self.assertEqual(session.calls[1]['params']['sort'], '-added_at')
+
+    def test_ascending_is_the_bare_field(self):
+        session = FakeSession(LIBRARIES, page([movie(1)], 1))
+
+        section(session).all(0, 50, sort=('titleSort', 'asc'))
+
+        self.assertEqual(session.calls[1]['params']['sort'], 'title')
+
+    def test_a_sort_silo_lacks_leaves_silos_own_order(self):
+        session = FakeSession(LIBRARIES, page([movie(1)], 1))
+
+        section(session).all(0, 50, sort=('lastViewedAt', 'desc'))
+
+        self.assertNotIn('sort', session.calls[1]['params'])

@@ -8,6 +8,15 @@ the library grid (silonet.server).
 from xml.etree import ElementTree
 
 
+def container(children=(), **attrs):
+    """A Plex <MediaContainer> of these elements, with any further attributes (totalSize, offset)."""
+    root = ElementTree.Element('MediaContainer', {'size': str(len(children))})
+    root.extend(children)
+    for name, value in attrs.items():
+        root.set(name, str(value))
+    return root
+
+
 def ms(seconds):
     return str(round(seconds * 1000))
 

@@ -9,17 +9,15 @@ import re
 from urllib.parse import parse_qsl
 from xml.etree import ElementTree
 
-from . import home
+from . import home, library
 from .client import log
 from .errors import SiloError
-from .items import itemElements
+from .items import container
 
 # Silo library types to the Plex section types plexlibrary knows; mixed libraries wait for a later phase
 SECTION_TYPES = {'movies': 'movie', 'series': 'show'}
-# a library's grid (plexlibrary.LibrarySection.all()): /library/sections/<library id>/all
-LIBRARY_ALL = re.compile(r'^/library/sections/([^/]+)/all$')
-# the most items /api/v2/catalog answers a request
-CATALOG_PAGE_MAX = 200
+# a library's grid (plexlibrary.LibrarySection.all()) and its sort menu: /library/sections/<library id>/all|sorts
+LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts)$')
 
 
 class SiloConnection:
@@ -27,12 +25,6 @@ class SiloConnection:
 
     def __init__(self, address):
         self.address = address
-
-
-def container(children=()):
-    root = ElementTree.Element('MediaContainer', {'size': str(len(children))})
-    root.extend(children)
-    return root
 
 
 class SiloServer:
@@ -65,11 +57,14 @@ class SiloServer:
             handler = functools.partial(
                 self._homeRow, route[len(home.ROW_PATH) :], kwargs.get('offset'), kwargs.get('limit')
             )
-        libraryAll = LIBRARY_ALL.match(route) if handler is None else None
-        if libraryAll:
+        libraryPath = LIBRARY_PATH.match(route) if handler is None else None
+        if libraryPath and libraryPath.group(2) == 'sorts':
+            handler = library.sortsContainer
+        elif libraryPath:
             handler = functools.partial(
-                self._libraryItems,
-                libraryAll.group(1),
+                library.libraryItems,
+                self.client,
+                libraryPath.group(1),
                 dict(parse_qsl(queryString)),
                 kwargs.get('offset'),
                 kwargs.get('limit'),
@@ -95,55 +90,22 @@ class SiloServer:
         root.set('totalSize', str(len(items)))
         return root
 
-    def _libraryItems(self, libraryId, args, offset=None, limit=None):
-        """
-        A library's grid (plexlibrary.LibrarySection.all()) from Silo's catalog: its count (size 0: totalSize alone) or
-        a chunk. A chunk is Silo's explicit window jump (seek=start, limit=size), as the grid asks for chunks out of
-        order; one past CATALOG_PAGE_MAX is asked in pieces. No size: the whole library.
-        """
-        start = int(args.get('X-Plex-Container-Start', offset or 0) or 0)
-        size = args.get('X-Plex-Container-Size', limit)
-        size = None if size is None else int(size)
-        query = {'source': 'query', 'library_id': libraryId}
-        if size == 0:
-            answer = self.client.request('GET', '/api/v2/catalog', params=dict(query, limit=1)) or {}
-            root = container()
-            root.set('totalSize', str(answer.get('total') or 0))
-            return root
-
-        elements, total, position = [], 0, start
-        while size is None or position < start + size:
-            want = CATALOG_PAGE_MAX if size is None else min(start + size - position, CATALOG_PAGE_MAX)
-            answer = self.client.request('GET', '/api/v2/catalog', params=dict(query, seek=position, limit=want)) or {}
-            items = answer.get('items') or []
-            total = answer.get('total') or 0
-            elements += itemElements(items)
-            position += len(items)
-            if len(items) < want or position >= total:
-                break
-        for element in elements:
-            element.set('librarySectionID', libraryId)
-        root = container(elements)
-        root.set('totalSize', str(total))
-        root.set('offset', str(start))
-        return root
-
     def _sections(self):
         data = self.client.request('GET', '/api/v2/user/libraries') or {}
         sections = []
-        for library in data.get('items') or []:
-            kind = SECTION_TYPES.get(library.get('type'))
+        for entry in data.get('items') or []:
+            kind = SECTION_TYPES.get(entry.get('type'))
             if kind is None:
                 continue
             sections.append(
                 ElementTree.Element(
                     'Directory',
                     {
-                        'key': library['id'],
-                        'uuid': library['id'],
-                        'title': library.get('name') or '',
+                        'key': entry['id'],
+                        'uuid': entry['id'],
+                        'title': entry.get('name') or '',
                         'type': kind,
-                        'thumb': library.get('poster_url') or '',
+                        'thumb': entry.get('poster_url') or '',
                     },
                 )
             )
