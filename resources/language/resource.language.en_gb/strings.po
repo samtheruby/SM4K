@@ -4369,3 +4369,7 @@ msgstr ""
 msgctxt "#35312"
 msgid "Add server"
 msgstr ""
+
+msgctxt "#35313"
+msgid "Remove path mapping"
+msgstr ""
