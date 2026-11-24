@@ -56,6 +56,21 @@ class SiloAccount:
         return self.user.get('role') == 'admin'
 
     @property
+    def username(self):
+        return self.user.get('username') or ''
+
+    @property
+    def title(self):
+        """The name Home shows for who is signed in: the acting profile's, else the account's."""
+        current = self.getHomeUser(self.ID)
+        return current.title if current else self.username
+
+    @property
+    def thumb(self):
+        current = self.getHomeUser(self.ID)
+        return current.thumb if current else ''
+
+    @property
     def isProtected(self):
         current = self.getHomeUser(self.ID)
         return bool(current and current.isProtected)

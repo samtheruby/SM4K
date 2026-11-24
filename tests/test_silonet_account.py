@@ -153,6 +153,35 @@ class SiloAccountTest(KodiTestCase):
         self.assertTrue(acct.isProtected)
         app.trigger.assert_called_once_with('account:verification_required')
 
+    def sidebarProperties(self, acct):
+        """Home's sidebar user properties (sidebar_model.serverAndUserProperties()) with this account signed in."""
+        from lib.windows import sidebar_model
+
+        with (
+            mock.patch.object(sidebar_model.plexapp, 'ACCOUNT', acct),
+            mock.patch.object(sidebar_model, 'sidebarServers', return_value=[]),
+        ):
+            return dict(sidebar_model.serverAndUserProperties())
+
+    def test_sidebar_shows_the_acting_profile(self):
+        acct = account(FakeSession(PROFILES), profileId='p2')
+        acct.updateHomeUsers()
+
+        props = self.sidebarProperties(acct)
+
+        self.assertEqual(
+            (props['user.name'], props['user.avatar'], props['user.avatar.letter']),
+            ('Kids', 'https://silo.lan/avatar/p2.webp', 'K'),
+        )
+
+    def test_sidebar_without_a_profile_shows_the_account(self):
+        acct = account(FakeSession(PROFILES), profileId=None)
+        acct.updateHomeUsers()
+
+        props = self.sidebarProperties(acct)
+
+        self.assertEqual((props['user.name'], props['user.avatar']), ('sam', ''))
+
     def test_sign_out_revokes_session_and_clears_credentials(self):
         session = FakeSession(FakeResponse(204))
         acct = account(session)
