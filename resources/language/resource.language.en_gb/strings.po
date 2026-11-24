@@ -4281,3 +4281,43 @@ msgstr ""
 msgctxt "#35290"
 msgid "Watch party · {0}"
 msgstr ""
+
+msgctxt "#35291"
+msgid "Couldn't suggest it"
+msgstr ""
+
+msgctxt "#35292"
+msgid "Vote on what to watch"
+msgstr ""
+
+msgctxt "#35293"
+msgid "Choose a suggestion to play it for everyone"
+msgstr ""
+
+msgctxt "#35294"
+msgid "The host plays one"
+msgstr ""
+
+msgctxt "#35295"
+msgid "Members vote on what to watch"
+msgstr ""
+
+msgctxt "#35296"
+msgid "Suggestions"
+msgstr ""
+
+msgctxt "#35297"
+msgid "No suggestions yet"
+msgstr ""
+
+msgctxt "#35298"
+msgid "Suggest something with Watch together on its screen"
+msgstr ""
+
+msgctxt "#35299"
+msgid "1 vote"
+msgstr ""
+
+msgctxt "#35300"
+msgid "{0} votes"
+msgstr ""

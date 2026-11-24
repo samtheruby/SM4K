@@ -22,6 +22,7 @@ TICKET = re.compile(r'^[A-Za-z0-9_-]{43}$')
 TERMINAL = (401, 403, 404, 409, 410)  # a ticket or upgrade refused for good
 CLOCK_SAMPLES = 8  # the server's clock from the fastest of the last this many pings
 FAST_PINGS, FAST_PING_EVERY, PING_EVERY = 4, 2.0, 15.0  # seconds
+SUGGESTION_PAGE, MAX_SUGGESTIONS = 100, 200  # a room holds 200 at most (docs/realtime-api.md)
 
 
 class Room:
@@ -77,6 +78,53 @@ class Room:
         """Let guests play and pause the room (or only the host), as the host."""
         policy = 'guest_play_pause' if allowed else 'host_only'
         self.update(client.request('PATCH', self._path('/policy'), json={'guest_control_policy': policy}) or {})
+
+    def setVoting(self, client, voting):
+        """Have members vote on what to watch (or the host pick), as the host; only in the lobby."""
+        mode = 'vote' if voting else 'host_pick'
+        self.update(client.request('PATCH', self._path('/selection-mode'), json={'selection_mode': mode}) or {})
+
+    def suggestions(self, client):
+        """Every suggestion in the room (each with voted_by_me, this profile's own vote), page by page."""
+        found, cursor = [], None
+        while True:
+            params = {'limit': SUGGESTION_PAGE}
+            if cursor:
+                params['cursor'] = cursor
+            answer = client.request('GET', self._path('/suggestions'), params=params, headers=self._proof()) or {}
+            found.extend(answer.get('items') or [])
+            page = answer.get('page') or {}
+            cursor = page.get('next_cursor')
+            if not page.get('has_more') or not cursor or len(found) >= MAX_SUGGESTIONS:
+                return found
+
+    def suggest(self, client, contentId, contentType, title, subtitle=''):
+        """Suggest something to watch (a movie or an episode) in a voting room."""
+        body = {
+            'suggestion_id': str(uuid.uuid4()),
+            'content_id': contentId,
+            'content_type': contentType,
+            'title': title,
+        }
+        if subtitle:
+            body['subtitle'] = subtitle
+        client.request('POST', self._path('/suggestions'), json=body, headers=self._proof())
+
+    def vote(self, client, suggestionId, on):
+        """Vote for a suggestion, or take the vote back."""
+        client.request(
+            'POST' if on else 'DELETE', self._path(f'/suggestions/{suggestionId}/vote'), headers=self._proof()
+        )
+
+    def promote(self, client, suggestionId):
+        """Play a suggestion for everyone, as the host (whatever the votes say)."""
+        answer = client.request(
+            'POST', self._path('/suggestions/promote'), json={'suggestion_id': suggestionId}, headers=self._proof()
+        )
+        self.update(answer or {})
+
+    def _proof(self):
+        return {'X-Room-Token': self.token}
 
     def read(self, client):
         self.update(client.request('GET', self._path(), headers={'X-Room-Token': self.token}) or {})

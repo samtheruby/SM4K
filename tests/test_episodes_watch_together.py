@@ -1,7 +1,7 @@
 """
 Watch together from the Episodes screen (decision D26): an episode card's More actions offer Watch together on a Silo
 server, as a film's pre-play screen does, and choosing it puts that episode up next in the host's party
-(watch_together.hostItem()). The season card has none: a party plays an episode, not a season.
+(watch_together.pickItem()). The season card has none: a party plays an episode, not a season.
 
 Importing lib.windows.* starts lib.player's monitor thread unless abort_requested is set first.
 """
@@ -51,10 +51,10 @@ class EpisodesWatchTogetherTest(KodiTestCase):
         self.assertNotIn('watch_together', self.actions(isSeasonCard=True))
 
     def test_choosing_it_hosts_the_episode(self):
-        with mock.patch.object(episodes.watch_together, 'hostItem') as hostItem:
+        with mock.patch.object(episodes.watch_together, 'pickItem') as pickItem:
             self.window.runMoreAction('watch_together', self.mli, False)
 
-        video, fileId, play = hostItem.call_args[0]
+        video, fileId, play = pickItem.call_args[0]
         self.assertIs(video, self.episode)
         self.assertIsNone(fileId)  # a card not loaded with its files: Silo picks the file for the room
         self.assertTrue(callable(play))

@@ -131,6 +131,70 @@ class RoomRequestsTest(KodiTestCase):
         )
         self.assertEqual(joined.snapshot['guest_control_policy'], 'guest_play_pause')
 
+    def test_the_host_switches_to_voting(self):
+        session = FakeSession(ok({'room': dict(SNAPSHOT, selection_mode='vote')}))
+        joined = room.Room({'room': SNAPSHOT, 'room_access_token': 'proof'})
+
+        joined.setVoting(server(session).client, True)
+
+        self.assertEqual(
+            (session.calls[0]['method'], session.calls[0]['url'], session.calls[0]['json']),
+            ('PATCH', BASE + '/watch-together/rooms/r1/selection-mode', {'selection_mode': 'vote'}),
+        )
+        self.assertEqual(joined.snapshot['selection_mode'], 'vote')
+
+    def test_suggestions_are_read_page_by_page(self):
+        first = {
+            'items': [{'id': 's1', 'title': 'Dune', 'vote_count': 2}],
+            'page': {'has_more': True, 'next_cursor': 'c2'},
+        }
+        second = {'items': [{'id': 's2', 'title': 'Heat', 'vote_count': 0}], 'page': {'has_more': False}}
+        session = FakeSession(ok(first), ok(second))
+        joined = room.Room({'room': SNAPSHOT, 'room_access_token': 'proof'})
+
+        found = joined.suggestions(server(session).client)
+
+        self.assertEqual([s['id'] for s in found], ['s1', 's2'])
+        self.assertEqual(session.calls[1]['params'], {'limit': 100, 'cursor': 'c2'})
+        self.assertEqual(session.calls[0]['headers']['X-Room-Token'], 'proof')
+
+    def test_suggesting_voting_and_promoting(self):
+        session = FakeSession(
+            ok({'suggestion_id': 'x'}, 201), ok(None, 204), ok(None, 204), ok({'room': dict(SNAPSHOT, phase='playing')})
+        )
+        joined = room.Room({'room': SNAPSHOT, 'room_access_token': 'proof'})
+        client = server(session).client
+
+        joined.suggest(client, 'episode-tvdb-78857-1-2', 'episode', 'My Name Is Konohamaru!', 'Naruto · S1E2')
+        joined.vote(client, 's1', True)
+        joined.vote(client, 's1', False)
+        joined.promote(client, 's1')
+
+        calls = [(c['method'], c['url'].replace(BASE + '/watch-together/rooms/r1', '')) for c in session.calls]
+        self.assertEqual(
+            calls,
+            [
+                ('POST', '/suggestions'),
+                ('POST', '/suggestions/s1/vote'),
+                ('DELETE', '/suggestions/s1/vote'),
+                ('POST', '/suggestions/promote'),
+            ],
+        )
+        body = session.calls[0]['json']
+        self.assertEqual(
+            {k: body[k] for k in ('content_id', 'content_type', 'title', 'subtitle')},
+            {
+                'content_id': 'episode-tvdb-78857-1-2',
+                'content_type': 'episode',
+                'title': 'My Name Is Konohamaru!',
+                'subtitle': 'Naruto · S1E2',
+            },
+        )
+        self.assertEqual(len(body['suggestion_id']), 36)
+        self.assertEqual(session.calls[3]['json'], {'suggestion_id': 's1'})
+        self.assertTrue(all(c['headers']['X-Room-Token'] == 'proof' for c in session.calls))
+        self.assertEqual(joined.snapshot['phase'], 'playing')
+
     def test_what_a_room_plays_by_name(self):
         session = FakeSession(
             ok({'content_id': 'movie-tmdb-238', 'type': 'movie', 'title': 'The Godfather'}),

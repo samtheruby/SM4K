@@ -58,6 +58,10 @@ class Party:
         self.version = 0  # counts the room's changes: the party screen redraws on a new one
         self.titleSource = None  # content id -> its name (silonet.room.titleOf)
         self._titles = {}
+        # a voting room's suggestions (the socket's suggestions_update), and this profile's own votes: the socket's
+        # copies say voted_by_me false for everyone, so they're kept from the last HTTP read and this device's votes
+        self.suggestions, self.myVotes = [], set()
+        self.suggestionSource = None  # -> the room's suggestions, read over HTTP (silonet.room.Room.suggestions)
         self.ended = None
         self.changed = threading.Event()
         self._echoUntil = 0.0
@@ -73,12 +77,36 @@ class Party:
     def isHost(self):
         return self.snapshot.get('self_role') == 'host'
 
+    @property
+    def isVoting(self):
+        return self.snapshot.get('selection_mode') == 'vote'
+
     def adopt(self, snapshot):
         """The room as an answer to one of this device's requests has it (a newer generation than the socket's)."""
         if snapshot and snapshot.get('generation', 0) >= self.snapshot.get('generation', 0):
+            wasVoting = self.isVoting
             self.snapshot = dict(snapshot)
             self.version += 1
             self.changed.set()
+            if self.isVoting and not wasVoting:
+                self.later(0, self.loadSuggestions)
+
+    def loadSuggestions(self):
+        """Read the room's suggestions and this profile's votes on them (when the room turns to voting, or this
+        device joins one that votes)."""
+        from silonet.errors import SiloError
+
+        if self.suggestionSource is None:
+            return
+        try:
+            found = self.suggestionSource()
+        except SiloError as e:
+            util.LOG('Watch party: reading suggestions failed: {0}', e)
+            return
+        self.suggestions = found
+        self.myVotes = {s.get('id') for s in found if s.get('voted_by_me')}
+        self.version += 1
+        self.changed.set()
 
     def selfMember(self):
         return next((m for m in self.snapshot.get('members') or [] if m.get('is_self')), {})
@@ -128,6 +156,10 @@ class Party:
         kind = message.get('type')
         if kind == 'snapshot' and message.get('room'):
             self.adopt(message['room'])
+        elif kind == 'suggestions_update':
+            self.suggestions = message.get('suggestions') or []
+            self.version += 1
+            self.changed.set()
         elif kind == 'transport_command' and message.get('command'):
             self._schedule(message['command'])
         elif kind == 'room_closed':
@@ -404,10 +436,13 @@ class Session:
         self.link = RoomSocket(server.client, room, self.party.onMessage)
         self.party.link = self.link
         self.party.titleSource = functools.partial(rooms.titleOf, server.client)
+        self.party.suggestionSource = functools.partial(room.suggestions, server.client)
 
     def begin(self):
         self.link.start()
         self.party.start()
+        if self.party.isVoting:
+            self.party.later(0, self.party.loadSuggestions)
 
     def leave(self):
         """Leave the party; the host's leaving ends it for everyone."""
@@ -452,16 +487,28 @@ def _begin(server, room):
 STOP_FOR_EVERYONE, END_PARTY, KEEP_WATCHING = 0, 1, 2
 
 
-def hostItem(video, fileId, play):
-    """Put video (its fileId version) up next in a party this profile hosts, a new one or the one in progress, and
-    open the party screen: members mark themselves ready, and the host starts it for everyone. In a room already
-    playing, it plays right away. play(video, seconds) plays an item, blocking while it plays."""
+def pickItem(video, fileId, play):
+    """
+    Watch together on an item (its fileId version), then the party's screen. In a party that votes, the item is
+    suggested. As a guest of a party whose host picks, the party's screen opens: the host picks. Otherwise it goes up
+    next in a party this profile hosts, a new one or the one in progress (in a room already playing, it plays right
+    away): members mark themselves ready, and the host starts it for everyone. play(video, seconds) plays an item,
+    blocking while it plays.
+    """
     from silonet import room as rooms
     from silonet.errors import SiloError
 
     server = video.getServer()
     session = current(server)
     contentId = str(video.ratingKey)
+    if session is not None and session.party.isVoting:
+        suggest(session, video)
+        runParty(session, play)
+        return
+    if session is not None and not session.party.isHost:
+        util.showNotification(T(35268, 'In a watch party, the host picks what plays'), header=T(35271, 'Watch party'))
+        runParty(session, play)
+        return
     try:
         if session is None or not session.party.isHost:
             session = _begin(server, rooms.create(server.client))
@@ -476,6 +523,22 @@ def hostItem(video, fileId, play):
     session.party.adopt(session.room.snapshot)
     util.LOG('Watch party: hosting {0} in room {1}', contentId, session.room.snapshot.get('code'))
     runParty(session, play)
+
+
+def suggest(session, video):
+    """Suggest video in the party's vote: a film by its title, an episode by its own with its show and numbers."""
+    from silonet.errors import SiloError
+
+    subtitle = ''
+    if video.type == 'episode':
+        subtitle = f'{video.grandparentTitle} · S{video.parentIndex}E{video.index}'
+    try:
+        session.room.suggest(session.server.client, str(video.ratingKey), video.type, video.title, subtitle)
+    except SiloError as e:
+        util.LOG('Watch party: suggesting failed: {0}', e)
+        util.showNotification(T(35291, "Couldn't suggest it"), header=T(35271, 'Watch party'))
+        return
+    session.party.loadSuggestions()
 
 
 def joinParty(server, play):
@@ -598,34 +661,65 @@ def partyRows(party):
     selected = snapshot.get('selected_content_id')
     lobby = snapshot.get('phase') != 'playing'
     members = snapshot.get('members') or []
-    if not selected:
+    if not selected and party.isVoting:
+        how = (
+            T(35293, 'Choose a suggestion to play it for everyone') if party.isHost else T(35294, 'The host plays one')
+        )
+        rows = [('status', (T(35292, 'Vote on what to watch'), how), False)]
+    elif not selected:
         waiting = '' if party.isHost else T(35264, 'Waiting for the host to start something...')
         rows = [('status', (T(35278, 'Nothing picked yet'), waiting), False)]
     elif lobby:
         rows = [('status', (T(35279, 'Up next: {0}').format(party.titleFor(selected)), ''), False)]
     else:
         rows = [('status', (T(35280, 'Playing: {0}').format(party.titleFor(selected)), ''), False)]
+    readyCheck = lobby and selected and not party.isVoting  # a voting room starts by the host playing a suggestion
     if party.isHost:
-        if lobby and selected:
+        if readyCheck:
             guests = [m for m in members if not m.get('is_host')]
             ready = T(35281, '{0} of {1} ready').format(sum(1 for m in guests if m.get('lobby_ready')), len(guests))
             rows.append(('start', (T(35282, 'Start for everyone'), ready), False))
         allowed = snapshot.get('guest_control_policy') == 'guest_play_pause'
         rows.append(('guest_control', T(35283, 'Guests can play and pause'), allowed))
+        if lobby:
+            rows.append(('voting', T(35295, 'Members vote on what to watch'), party.isVoting))
         rows.append(('end', T(35269, 'End watch party'), False))
     else:
-        if lobby and selected:
+        if readyCheck:
             rows.append(('ready', T(35284, "I'm ready"), bool(party.selfMember().get('lobby_ready'))))
         rows.append(('leave', T(35285, 'Leave watch party'), False))
+    if party.isVoting:
+        rows.append(optionGroup(T(35296, 'Suggestions')))
+        rows.extend(suggestionRows(party))
     rows.append(optionGroup(T(35286, 'In the party')))
     for member in members:
         if member.get('is_host'):
             state = T(35287, 'Host')
-        elif lobby and selected:
+        elif readyCheck:
             state = T(35288, 'Ready') if member.get('lobby_ready') else T(35289, 'Not ready')
         else:
             state = ''
         rows.append(('member', (member.get('display_name') or '', state), False))
+    return rows
+
+
+def suggestionRows(party):
+    """A voting room's suggestions, most votes first (then the oldest), this profile's own votes ticked."""
+    if not party.suggestions:
+        return [
+            (
+                'nosuggestion',
+                (T(35297, 'No suggestions yet'), T(35298, 'Suggest something with Watch together on its screen')),
+                False,
+            )
+        ]
+    rows = []
+    ordered = sorted(party.suggestions, key=lambda s: (-(s.get('vote_count') or 0), s.get('created_at') or ''))
+    for s in ordered:
+        count = s.get('vote_count') or 0
+        votes = T(35299, '1 vote') if count == 1 else T(35300, '{0} votes').format(count)
+        sub = ' · '.join(part for part in (s.get('subtitle'), votes) if part)
+        rows.append(('suggestion:' + str(s.get('id')), (s.get('title') or '', sub), s.get('id') in party.myVotes))
     return rows
 
 
@@ -645,6 +739,21 @@ def choose(session, key):
             session.room.start(client)
             party.adopt(session.room.snapshot)
             return False
+        elif key == 'voting':
+            session.room.setVoting(client, not party.isVoting)
+            party.adopt(session.room.snapshot)
+        elif key.startswith('suggestion:'):
+            suggestionId = key.split(':', 1)[1]
+            if party.isHost:
+                session.room.promote(client, suggestionId)
+                party.adopt(session.room.snapshot)
+                return False
+            on = suggestionId not in party.myVotes
+            session.room.vote(client, suggestionId, on)
+            if on:
+                party.myVotes.add(suggestionId)
+            else:
+                party.myVotes.discard(suggestionId)
         elif key in ('end', 'leave'):
             return False
     except SiloError as e:
