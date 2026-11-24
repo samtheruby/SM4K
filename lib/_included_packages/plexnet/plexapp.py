@@ -87,7 +87,7 @@ class App(signalsmixin.SignalsMixin):
             util.DEBUG_LOG('Canceling App() timers...')
             self.cancelAllTimers()
 
-        servers = SERVERMANAGER.getServers()
+        servers = SERVERMANAGER.getServers() if SERVERMANAGER else []  # none before SM4K's sign-in
         if servers:
             # every server's in-flight requests: any of them may be in use (there's no one
             # selected server now)
