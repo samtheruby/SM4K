@@ -95,6 +95,17 @@ class SiloStreamInfoTest(KodiTestCase):
         self.assertEqual(lines['Video'], 'hevc, 4k, 24360kbit, copy')
         self.assertEqual(lines['Audio'], 'truehd, 4305kbit, 8ch, copy')
 
+    def test_a_remux_that_converts_dolby_vision_copies_the_video(self):
+        # seen on the box: a Dolby Vision profile 7 file Silo sends as a remux to MP4 (its session: video_decision
+        # remux, adaptation dynamic_range_unsupported). A remux repackages the codecs untouched, though its recipe's
+        # dynamic range differs from the source's
+        lines = self.panel(planned('server_remux_progressive', {'dynamic_range': 'hdr10'}, container='mp4'))
+
+        self.assertEqual(lines['Mode'].split(', ')[0], 'remux')
+        self.assertEqual(lines['Container'], 'mkv->mp4')
+        self.assertEqual(lines['Video'], 'hevc, 4k, 24360kbit, copy')
+        self.assertEqual(lines['Audio'], 'truehd, 4305kbit, 8ch, copy')
+
     def test_audio_reencoded_alone_leaves_the_video_copied(self):
         # Silo's audio adaptation: a transcode delivery whose only transformation is the audio's
         answer = planned('server_transcode_hls', {'audio_codec': 'eac3', 'audio_channels': 6}, ('audio_to_eac3',))
@@ -106,7 +117,7 @@ class SiloStreamInfoTest(KodiTestCase):
 
     def test_a_value_the_source_doesnt_list_is_no_change(self):
         # the source descriptor's fields are optional (decision-response.schema.json): one it leaves out isn't a change
-        answer = planned('server_remux_hls', container='hls')
+        answer = planned('server_transcode_hls', container='hls')
         del answer['playback_plan']['source']['dynamic_range']
 
         lines = self.panel(answer)

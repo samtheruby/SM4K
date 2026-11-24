@@ -9,8 +9,8 @@ version's own value.
 
 from .detail import RESOLUTIONS, element
 
-# a delivery as the panel's Mode (Plex's part decision): the file itself, repackaged, or re-encoded
-# (playback-protocol-v3.md section 4)
+# a delivery as the panel's Mode (Plex's part decision): the file itself, repackaged with its codecs untouched, or
+# re-encoded (playback-protocol-v3.md section 4)
 MODES = {
     'original_http': 'directplay',
     'server_remux_progressive': 'remux',
@@ -44,12 +44,17 @@ def sessionElement(attempt):
         audioIndex = attempt.request.get('audio_track_index')
     names = [t.get('name') or '' for t in plan.get('transformations') or [] if t.get('executor') == 'server']
 
+    mode = MODES.get(delivery, delivery)
     media = {'id': fileId}
-    part = {'id': fileId, 'decision': MODES.get(delivery, delivery)}
+    part = {'id': fileId, 'decision': mode}
     video = {'streamType': 1, 'id': f'{fileId}.v0', 'decision': 'directplay'}
     audio = {'streamType': 2, 'id': f'{fileId}.a{audioIndex}', 'decision': 'directplay'}
-    if delivery != 'original_http':
+    if mode != 'directplay':
         part['container'] = recipe.get('segment_container') or (plan.get('stream') or {}).get('container')
+    if mode == 'remux':
+        # copied, also when the recipe's dynamic range differs (a Dolby Vision profile Silo converts on the way)
+        video['decision'] = audio['decision'] = 'copy'
+    elif mode != 'directplay':
         video['decision'] = _decision(plan, VIDEO, any(not name.startswith('audio_') for name in names))
         audio['decision'] = _decision(plan, AUDIO, any(name.startswith('audio_') for name in names))
     if video['decision'] == 'transcode':
