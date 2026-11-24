@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import json
+import os
 import threading
 import time
 import weakref
@@ -26,7 +27,7 @@ from lib import watch_together
 from lib.util import T
 from . import background
 from . import busy
-from .dialog import optionGroup, showOptionsDialog, SidebarMenuDialog
+from .dialog import showOptionsDialog, SidebarMenuDialog
 from . import collection
 from . import dropdown
 from . import home
@@ -3598,10 +3599,10 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             return
 
         section = item.dataSource
-        # In the option picker, beside the sidebar (the user, 2026-10-23): the actions, then the library's folders
-        # under a "Map path(s)" group title. Rows as (key, label); a folder's key ('map', its path, mapped). A
-        # menu with nothing in it isn't opened - the key does nothing (Watchlist, a library whose server
-        # isn't answering).
+        # In the option picker, beside the sidebar (the user, 2026-10-23): the actions, then Map path - a button that
+        # opens Kodi's folder selector (the user, 2026-11-24), Remove path mapping once mapped. Rows as (key, label).
+        # A menu with nothing in it isn't opened - the key does nothing (Watchlist, a library whose server isn't
+        # answering).
         actions, mappable = [], []
         if not section.key:
             # home section
@@ -3638,29 +3639,28 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
                 mappable = list(section.locations)
             heading = T(33030, 'Choose action for: {}').format(section.title)
 
+        def mapped(loc):
+            return all(section.getMappedPath(loc))
+
         def menuOptions():
-            """The actions, then each folder as it's mapped now: Add: or Remove:. Each row's tick its own (never): the
-            row chosen is focused again on the way back to the menu (backToMenu()), not ticked as a value."""
-            maps = []
-            for loc in mappable:
-                source, target = section.getMappedPath(loc)
-                mapped = bool(source and target)
-                maps.append((('map', loc, mapped),
-                             T(35206, "Remove: {}").format(target) if mapped else T(35205, "Add: {}").format(loc),
-                             False))
+            """The actions, then Map path while a folder of the library isn't mapped and Remove path mapping once one
+            is. The server's own folders aren't shown: they mean nothing on the Kodi side. Each row's tick its own
+            (never): the row chosen is focused again on the way back to the menu (backToMenu())."""
             options = [(key, label, False) for key, label in actions]
-            if maps:
-                options.append(optionGroup(T(35204, "Map paths") if len(maps) > 1 else T(35203, "Map path")))
-                options += maps
+            if any(not mapped(loc) for loc in mappable):
+                options.append(('map_path', T(35203, "Map path"), False))
+            if any(mapped(loc) for loc in mappable):
+                options.append(('unmap_path', T(35313, "Remove path mapping"), False))
             return options
 
         def backToMenu(choice):
-            """The menu again, its rows as they are now, on the row chosen (a folder's by its path: mapping it
-            turns its Add: into Remove:)."""
+            """The menu again, its rows as they are now, on the row chosen; on its counterpart once Map path has
+            turned into Remove path mapping, or back."""
             options = menuOptions()
-            same = (lambda key: isinstance(key, tuple) and key[:2] == choice[:2]) if isinstance(choice, tuple) \
-                else (lambda key: key == choice)
-            return options, next((i for i, o in enumerate(options) if same(o[0])), 0)
+            keys = [o[0] for o in options]
+            if choice not in keys and choice in ('map_path', 'unmap_path'):
+                choice = 'unmap_path' if choice == 'map_path' else 'map_path'
+            return options, keys.index(choice) if choice in keys else 0
 
         # Done once the menu has closed, not under it: the sidebar redrawn (its mapped marker) and the rows refreshed
         # (Manage recommended rows changed them)
@@ -3670,16 +3670,23 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             """What opens something of its own opens it over the menu, as the add-on's Settings does, and Back
             comes back to it: Manage recommended rows and a folder's mapping. Empty Trash's confirm too, whose Yes
             empties it and closes the menu. The rest close the menu and run below."""
-            if isinstance(choice, tuple) and choice[0] == 'map':
-                _map, path, is_mapped = choice
-                if is_mapped:
-                    source, target = section.getMappedPath(path)
-                    section.deleteMapping(target)
-                else:
-                    d = xbmcgui.Dialog().browse(0, T(33031, "Select Kodi source for {}").format(path), "files")
+            if choice == 'map_path':
+                # Kodi's folder selector for each folder not mapped yet: the library by its name, a folder of a
+                # library with several by its own
+                for loc in [loc for loc in mappable if not mapped(loc)]:
+                    name = section.title if len(mappable) == 1 else '{} ({})'.format(
+                        section.title, os.path.basename(loc.rstrip('/\\')))
+                    d = xbmcgui.Dialog().browse(0, T(33031, "Select Kodi source for {}").format(name), "files")
                     if not d:
-                        return backToMenu(choice)
-                    section.addMapping(d, path)
+                        break
+                    section.addMapping(d, loc)
+                    after['sidebar'] = True
+                return backToMenu(choice)
+            if choice == 'unmap_path':
+                for loc in mappable:
+                    source, target = section.getMappedPath(loc)
+                    if source and target:
+                        section.deleteMapping(target)
                 after['sidebar'] = True
                 return backToMenu(choice)
             if choice == 'manage_hubs':
