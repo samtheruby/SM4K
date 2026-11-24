@@ -4092,3 +4092,43 @@ msgstr ""
 msgctxt "#35242"
 msgid "You're away after {time} with no user input (Note: playback never counts as being away)."
 msgstr ""
+
+msgctxt "#35243"
+msgid "On a phone or computer, open {link} and enter this code:"
+msgstr ""
+
+msgctxt "#35244"
+msgid "Sign-in was refused."
+msgstr ""
+
+msgctxt "#35245"
+msgid "The code expired before it was approved. Please try again."
+msgstr ""
+
+msgctxt "#35246"
+msgid "Couldn't sign in. Please try again."
+msgstr ""
+
+msgctxt "#35247"
+msgid "Silo server address, for example http://192.168.1.10:8090"
+msgstr ""
+
+msgctxt "#35248"
+msgid "Could not reach a Silo server at {address}."
+msgstr ""
+
+msgctxt "#35249"
+msgid "{address} is not a Silo server SiloMod can use."
+msgstr ""
+
+msgctxt "#35250"
+msgid "PIN for {name}"
+msgstr ""
+
+msgctxt "#35251"
+msgid "Too many wrong PINs. Try again in {minutes} minutes."
+msgstr ""
+
+msgctxt "#35252"
+msgid "Can't reach the Silo server. Check your connection and try again."
+msgstr ""

@@ -32,7 +32,6 @@ from . import home
 from . import kodigui
 from . import mapping_probe
 from . import optionsdialog
-from . import plexdirect
 from . import search
 from . import section_ids
 from . import sidebar_model
@@ -1664,21 +1663,9 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
                 options.append(('switch', T(32342, 'Switch User')))
             else:
                 options.append(('refresh_users', T(32980, 'Refresh Users')))
-        elif plexapp.ACCOUNT.isOffline and plexapp.util.LOCAL_MODE:
-            from lib import localmode
-            if len(plexapp.ACCOUNT.homeUsers) > 1:
-                options.append(('switch', T(32342, 'Switch User')))
-            if localmode.isAccountLess():
-                options.append(('local_users', T(35042, 'Local users')))
         options.append(('settings', T(32343, 'Settings')))
         if plexapp.ACCOUNT.isSignedIn:
-            options.append(('go_local', T(35019, 'Go local')))
             options.append(('signout', T(32344, 'Sign Out')))
-        elif plexapp.ACCOUNT.isOffline:
-            if plexapp.util.LOCAL_MODE:
-                options.append(('go_online', T(35020, 'Go online')))
-            else:
-                options.append(('go_online', T(32459, 'Offline Mode')))
         else:
             options.append(('signin', T(32460, 'Sign In')))
         options.append(('minimize', T(32924, 'Minimize')))
@@ -1690,8 +1677,8 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             self.doUserOption(choice)
 
     def _closeSessionWithOption(self, option, shutting_down=False):
-        """Every doUserOption() branch that ends a session (go_online while local, signout, exit,
-        the switch/signin/go_local catch-all) needs to act on the TRUE top-level session
+        """Every doUserOption() branch that ends a session (signout, exit,
+        the switch/signin catch-all) needs to act on the TRUE top-level session
         (windowutils.HOME), not necessarily self. self can be a second, nested LibraryWindow:
         opener.sectionClicked() (collections, photo directories, filtered sections) constructs one
         when there's no live chain to reuse. With one, it swaps the section into that chain in
@@ -1734,16 +1721,12 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             # return to Home). Path mapping's and Watchlist's: the sidebar redrawn. Season
             # thumbnails: Home's rows bound again, so their episode tiles change poster.
             themeChanged = []
-            plexDirectChanged = []
             mappingChanged = []
             watchlistChanged = []
             thumbsChanged = []
 
             def onThemeSetting(*args, **kwargs):
                 themeChanged.append(kwargs.get('id'))
-
-            def onPlexDirectSetting(*args, **kwargs):
-                plexDirectChanged.append(True)
 
             def onMappingSetting(*args, **kwargs):
                 mappingChanged.append(True)
@@ -1755,8 +1738,6 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
                 thumbsChanged.append(True)
 
             watched = (('theme_relevant_setting', onThemeSetting),
-                       ('change:force_pd_mapping', onPlexDirectSetting),
-                       ('change:handle_plexdirect', onPlexDirectSetting),
                        ('change:path_mapping', onMappingSetting),
                        ('change:path_mapping_indicators', onMappingSetting),
                        ('change:use_watchlist', onWatchlistSetting),
@@ -1775,8 +1756,6 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
                          ', '.join(themeChanged))
                 self._closeSessionWithOption('recompile')
             else:
-                if plexDirectChanged:
-                    windowutils.HOME.checkPlexDirectHosts()
                 if watchlistChanged:
                     # the entry is only added when its section exists (sidebar_model.sections())
                     sidebar_model.refreshWatchlistSection()
@@ -1788,18 +1767,8 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             self.setProperty('busy', '1')
             self._sidebarTarget().setFocusId(self.SECTION_LIST_ID)
             util.setGlobalProperty('update_requested', '1', wait=True)
-        elif option == 'go_online':
-            if plexapp.util.LOCAL_MODE:
-                # leave local mode via a clean re-init (re-verifies the account or opens sign-in)
-                self._closeSessionWithOption(option)
-                return
-            plexapp.ACCOUNT.refreshAccount()
         elif option == 'refresh_users':
             plexapp.ACCOUNT.updateHomeUsers(refreshSubscription=True)
-            return True
-        elif option == 'local_users':
-            from lib import localmode
-            localmode.seedUsersFromServer(reselect=True)
             return True
         elif option == 'signout':
             button = optionsdialog.show(
@@ -1856,11 +1825,12 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
                 'refresh after display sleep', lambda *a, **k: self.refreshAfterIdle('display'))),
             # Settings' update source; passed on to the update checker by tick()
             (plexapp.util.APP, 'change:update_source', self._onUpdateSourceChanged),
-            # the servers from plex.tv, on plexnet's thread: their plex.direct names (plexdirect.check())
-            (plexapp.util.APP, 'loaded:server_connections', self._onServerConnectionsLoaded),
             # plex.tv answering after the account went offline (MyPlexAccount.scheduleOfflineRetry(), or
             # Offline Mode in the user menu): the Watchlist back in the sidebar
             (plexapp.util.APP, 'account:online', self._postedHandler('onAccountOnline', self.onAccountOnline)),
+            # the acting profile's PIN session ended (SiloAccount.requireVerification(), on a request's thread)
+            (plexapp.util.APP, 'account:verification_required',
+             self._postedHandler('onProfileLocked', self.onProfileLocked)),
         )
         for emitter, signal, handler in self._serverSignalHandlers:
             emitter.on(signal, handler)
@@ -2120,22 +2090,6 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
 
     def _onUpdateSourceChanged(self, value=None, **kwargs):
         self._updateSourceChanged = value
-
-    def checkPlexDirectHosts(self, servers=None, source="stored"):
-        """Map the servers' plex.direct names that Kodi can't resolve (plexdirect.py). Any thread; the
-        "ask" question is posted to the main thread. Root only."""
-        if self._shuttingDown:
-            return
-        try:
-            if servers is None:
-                servers = list(plexapp.SERVERMANAGER.serversByUuid.values())
-            plexdirect.check(servers, source=source,
-                             post=lambda fn: self.postUI('plex.direct mapping', fn))
-        except Exception:
-            util.ERROR()
-
-    def _onServerConnectionsLoaded(self, servers=None, source="stored", **kwargs):
-        self.checkPlexDirectHosts(servers or (), source=source)
 
     def _answerUpdateChecker(self):
         """The update checker (update_checker.py, a service) talks to the UI through global
@@ -2467,6 +2421,13 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
         sidebar_model.refreshWatchlistSection()
         self._rebuildSidebar()
 
+    def onProfileLocked(self, *args, **kwargs):
+        """Silo answered that the acting profile's PIN session ended: Home closes as for Switch User, and main.py's
+        profile picker asks for the PIN."""
+        if self._shuttingDown:
+            return
+        self.doUserOption('switch')
+
     def onServerOnline(self, server=None, **kwargs):
         """A server answers again: its sidebar entries light up (and its libraries are asked for,
         if it hadn't listed them). If it's the server of what's on screen, say so and reload the
@@ -2565,11 +2526,6 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             # Only the true root reacts to the server signals (hookSignals())
             self._signalsHooked = True
             self.hookSignals()
-            # The stored servers' loaded:server_connections fired at startup, before any window
-            # (PlexServerManager.__init__()), and plex.tv's may have too: upstream HomeWindow checked
-            # them here as well as on the signal.
-            plexdirect.reset()
-            self.checkPlexDirectHosts()
         if self is windowutils.HOME and self.section is home.home_section:
             self.offerOnboarding()
         timing.mark('controls')
@@ -3392,9 +3348,6 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
         listed from what's stored, saying so. The sidebar is rebuilt, and Home reloaded, when it
         closes having changed."""
         servers = sorted(plexapp.SERVERMANAGER.getServers(), key=lambda x: (not x.owned, x.name.lower()))
-        if plexapp.util.LOCAL_MODE:
-            # local mode can only ever use servers with a plain LAN connection
-            servers = [x for x in servers if x.hasLocalModeConnection()]
 
         listed = {}
         playlists = {}
