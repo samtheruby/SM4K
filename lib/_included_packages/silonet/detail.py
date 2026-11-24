@@ -196,6 +196,11 @@ def mediaElement(version):
         )
         for n, a in enumerate(audioTracks)
     ]
+    # the file's own subtitle tracks first, in Kodi's order (Plex Uno selects one by its position among them), then
+    # the subtitle files beside the video, whose URLs the attempt's plan lists (SiloServer.buildUrl())
+    subtitles = version.get('subtitle_tracks') or []
+    own = [s for s in subtitles if not s.get('external')]
+    files = [s for s in subtitles if s.get('external')]
     streams += [
         element(
             'Stream',
@@ -203,6 +208,7 @@ def mediaElement(version):
                 'streamType': 3,
                 'id': f'{fileId}.s{s.get("index")}',
                 'index': s.get('index'),
+                'key': f'/silo/subtitles/{fileId}/external/{files.index(s)}' if s.get('external') else None,
                 'codec': s.get('codec'),
                 **languageAttrs(s.get('language')),
                 'title': s.get('title'),
@@ -212,7 +218,7 @@ def mediaElement(version):
                 'default': flag(s.get('default')),
             },
         )
-        for s in version.get('subtitle_tracks') or []
+        for s in own + files
     ]
     part.extend(streams)
     media.append(part)
@@ -311,6 +317,10 @@ def detailElement(detail):
     root.extend(mediaElement(version) for version in versions)
     if detail.get('extras'):
         root.append(extrasElement(detail['extras']))
+    # the theme song's id, which SiloServer.themeUrl() asks a grant for when theme music plays
+    themes = (detail.get('themes') or {}).get('items') or []
+    if themes and themes[0].get('id'):
+        root.set('theme', str(themes[0]['id']))
     return root
 
 
@@ -322,10 +332,11 @@ def itemDetail(client, contentIds, params=None):
     the item opens without it."""
     ids = contentIds.split(',')
     seasons = {}  # (series id, season number) -> the season, asked for once for the episodes of one season
+    prefs = {}  # series id -> its remembered audio and subtitle choice (silonet.trackprefs), asked for once
     elements = []
     for contentId in ids:
         try:
-            root = oneDetail(client, contentId, params, seasons)
+            root = oneDetail(client, contentId, params, seasons, prefs)
         except SiloError as e:
             if len(ids) == 1:
                 raise
@@ -336,7 +347,7 @@ def itemDetail(client, contentIds, params=None):
     return container(elements)
 
 
-def oneDetail(client, contentId, params, seasons):
+def oneDetail(client, contentId, params, seasons, prefs):
     answer = client.request('GET', f'/api/v2/catalog/items/{contentId}') or {}
     root = detailElement(answer)
     if root is None:
@@ -349,6 +360,11 @@ def oneDetail(client, contentId, params, seasons):
             setSeason(root, seasons[place])
         except SiloError as e:
             log(f'season of {contentId} failed: {e.status} {e.type}')
+        from . import trackprefs  # imports this module
+
+        if answer['series_id'] not in prefs:
+            prefs[answer['series_id']] = trackprefs.load(client, answer['series_id'])
+        trackprefs.apply(root, *prefs[answer['series_id']])
     if answer.get('type') == 'series' and (params or {}).get('includeOnDeck') and answer.get('play_content_id'):
         try:
             episode = itemElement(client.request('GET', f'/api/v2/catalog/items/{answer["play_content_id"]}') or {})

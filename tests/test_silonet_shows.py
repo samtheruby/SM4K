@@ -270,7 +270,9 @@ class SiloEpisodesTest(KodiTestCase):
         self.assertEqual([(e.parentIndex.asInt(), e.index.asInt()) for e in episodes], [(1, 2), (2, 1)])
 
     def test_an_episodes_screen(self):
-        session = FakeSession(ok(EPISODE_2), ok(SEASON_ROW_1))
+        session = FakeSession(
+            ok(EPISODE_2), ok(SEASON_ROW_1), problem(404, 'not_found'), problem(404, 'not_found')
+        )  # no remembered tracks
 
         episode = tile(server(session), EPISODE_2).reload(checkFiles=1, includeChapters=1)
 
@@ -289,7 +291,14 @@ class SiloEpisodesTest(KodiTestCase):
         self.assertEqual(episode.media[0].videoResolution, '4k')
 
     def test_its_season_and_show(self):
-        session = FakeSession(ok(EPISODE_2), ok(SEASON_ROW_1), ok(SEASON_1), ok(SERIES))
+        session = FakeSession(
+            ok(EPISODE_2),
+            ok(SEASON_ROW_1),
+            problem(404, 'not_found'),
+            problem(404, 'not_found'),
+            ok(SEASON_1),
+            ok(SERIES),
+        )
         episode = tile(server(session), EPISODE_2).reload()
 
         season, show = episode.season(), episode.show()
@@ -298,7 +307,9 @@ class SiloEpisodesTest(KodiTestCase):
         self.assertEqual((show.ratingKey, show.title), ('series-tvdb-1', 'Harbor Lights'))
 
     def test_an_episode_whose_season_silo_cant_answer_still_opens(self):
-        session = FakeSession(ok(EPISODE_2), problem(404, 'not_found'))
+        session = FakeSession(
+            ok(EPISODE_2), problem(404, 'not_found'), problem(404, 'not_found'), problem(404, 'not_found')
+        )  # no season, no remembered tracks
 
         episode = tile(server(session), EPISODE_2).reload()
 
@@ -326,7 +337,9 @@ class SiloEpisodesAtOnceTest(KodiTestCase):
 
     def test_several_episodes_at_once(self):
         first = dict(EPISODE_2, content_id='episode-tvdb-1-1-1', episode_number=1, title='Arrival')
-        session = FakeSession(ok(first), ok(SEASON_ROW_1), ok(EPISODE_2))
+        session = FakeSession(
+            ok(first), ok(SEASON_ROW_1), problem(404, 'not_found'), problem(404, 'not_found'), ok(EPISODE_2)
+        )
 
         data = self.batch(session, ['episode-tvdb-1-1-1', 'episode-tvdb-1-1-2'])
 
@@ -339,13 +352,50 @@ class SiloEpisodesAtOnceTest(KodiTestCase):
             [
                 BASE + '/catalog/items/episode-tvdb-1-1-1',
                 BASE + '/catalog/series/series-tvdb-1/seasons/1',
+                BASE + '/audio-prefs/series-tvdb-1',
+                BASE + '/subtitle-prefs/series-tvdb-1',
                 BASE + '/catalog/items/episode-tvdb-1-1-2',
             ],
         )
 
     def test_an_episode_silo_cant_find_among_several_is_left_out(self):
-        session = FakeSession(problem(404, 'not_found'), ok(EPISODE_2), ok(SEASON_ROW_1))
+        session = FakeSession(
+            problem(404, 'not_found'),
+            ok(EPISODE_2),
+            ok(SEASON_ROW_1),
+            problem(404, 'not_found'),
+            problem(404, 'not_found'),
+        )
 
         data = self.batch(session, ['episode-tvdb-1-1-9', 'episode-tvdb-1-1-2'])
 
         self.assertEqual([d.get('ratingKey') for d in data], ['episode-tvdb-1-1-2'])
+
+
+class SiloEpisodeTileTest(KodiTestCase):
+    """An episode on a Home row names its season by number only (Silo's home items): its season comes from
+    /catalog/series/{id}/seasons/{num}, so the episodes screen opened from the tile has a season (on the Kodi box,
+    2026-11-24, it raised on a None season)."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+
+    def test_an_episode_from_home_finds_its_season(self):
+        homeItem = {
+            'content_id': 'episode-tvdb-1-1-2',
+            'type': 'episode',
+            'title': 'Undertow',
+            'series_id': 'series-tvdb-1',
+            'series_title': 'Harbor Lights',
+            'season_number': 1,
+            'episode_number': 2,
+        }
+        session = FakeSession(ok(SEASON_ROW_1))
+
+        season = tile(server(session), homeItem).season()
+
+        self.assertEqual(session.calls[0]['url'], BASE + '/catalog/series/series-tvdb-1/seasons/1')
+        self.assertEqual(
+            (season.ratingKey, season.index.asInt(), season.parentRatingKey), ('season-tvdb-1-1', 1, 'series-tvdb-1')
+        )

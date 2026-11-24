@@ -59,6 +59,10 @@ def itemElement(item):
             setIf(attrs, 'grandparentRatingKey', item.get('series_id'))
             if item.get('series_id'):
                 attrs['grandparentKey'] = '/library/metadata/' + item['series_id']
+                if item.get('season_number') is not None:
+                    # its season by number (silonet.shows.seasonByNumber()): Silo's home and grid items name no
+                    # season id; a reloaded episode's detail gives the season's own key instead
+                    attrs['parentKey'] = f'/library/metadata/{item["series_id"]}/season/{item["season_number"]}'
             setIf(attrs, 'parentIndex', item.get('season_number'))
             setIf(attrs, 'index', item.get('episode_number'))
         return ElementTree.Element('Video', attrs)

@@ -92,3 +92,12 @@ def allLeaves(client, contentId, offset=None, limit=None):
     start = offset or 0
     page = [] if limit == 0 else leaves[start : None if limit is None else start + limit]
     return container(page, totalSize=len(leaves))
+
+
+def seasonByNumber(client, seriesId, number):
+    """/library/metadata/<series id>/season/<num>: an episode tile's season (silonet.items), from
+    /catalog/series/{id}/seasons/{num}."""
+    row = client.request('GET', f'/api/v2/catalog/series/{seriesId}/seasons/{number}') or {}
+    if not row.get('content_id'):
+        return container()
+    return container(seasonElements({'type': 'series', 'content_id': seriesId}, [row]))
