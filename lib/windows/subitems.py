@@ -477,7 +477,9 @@ class ShowWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils.Si
         self.setProperty('clear.logo', logo)
         self.setProperty('summary', util.summaryForBox(self.mediaItem.summary))
         self.updateBackgroundFrom(self.mediaItem)
-        self.setProperty('duration', util.durationToShortText(self.mediaItem.fixedDuration(), noSpaces=True))
+        duration = self.mediaItem.fixedDuration()
+        # a show with none (Silo gives a series no runtime) leaves the row's field out, not "0s"
+        self.setProperty('duration', util.durationToShortText(duration, noSpaces=True) if duration else '')
         self.setProperty('info', '')
         self.setProperty('date', self.mediaItem.year)
         self.setProperty('content.rating', self.mediaItem.contentRating.split('/', 1)[-1])
