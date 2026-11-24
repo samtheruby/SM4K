@@ -18,6 +18,8 @@ LIBRARY_ROW_PATH = home.ROW_PATH + 'library/'
 
 # the most items /api/v2/catalog answers a request
 CATALOG_PAGE_MAX = 200
+# plexobjects.SEARCHTYPES['collection']: the type a grid's Collections tab asks for
+COLLECTION_TYPE = '18'
 
 # The sorts Uno's sort menu knows (library_grid.SORT_KEYS) that Silo's catalog sorts by: (Plex key, Silo field, Plex
 # default direction, title). Checked on the user's server: Silo refuses rating, random, last_watched, play_count,
@@ -57,15 +59,21 @@ def sortsContainer():
     )
 
 
-def libraryItems(client, libraryId, args, offset=None, limit=None):
-    """
-    A library's grid: its count (size 0: totalSize alone) or a chunk, sorted as asked when Silo sorts by it. No size:
-    the whole library.
-    """
+def window(args, offset=None, limit=None):
+    """The (start, size) a listing asks for: Plex's X-Plex-Container-Start/Size, or listItems()' offset/limit.
+    size None: everything; 0: the count alone."""
     start = int(args.get('X-Plex-Container-Start', offset or 0) or 0)
     size = args.get('X-Plex-Container-Size', limit)
-    size = None if size is None else int(size)
-    query = {'source': 'query', 'library_id': libraryId}
+    return start, None if size is None else int(size)
+
+
+def catalogListing(client, query, args, offset=None, limit=None):
+    """
+    A catalog listing (query: source and its scope) as a Plex container: its count (size 0: totalSize alone) or a
+    chunk, sorted as asked when Silo sorts by it. No size: the whole listing.
+    """
+    start, size = window(args, offset, limit)
+    query = dict(query)
     sort = catalogSort(args.get('sort'))
     if sort:
         query['sort'] = sort
@@ -83,9 +91,62 @@ def libraryItems(client, libraryId, args, offset=None, limit=None):
         position += len(items)
         if len(items) < want or position >= total:
             break
-    for element in elements:
-        element.set('librarySectionID', libraryId)
     return container(elements, totalSize=total, offset=start)
+
+
+def libraryItems(client, libraryId, args, offset=None, limit=None, memberType=''):
+    """A library's grid: its titles from the catalog, or on the Collections tab (type=18) its collections."""
+    if args.get('type') == COLLECTION_TYPE:
+        return collectionsTab(client, libraryId, args, offset, limit, memberType)
+    listing = catalogListing(client, {'source': 'query', 'library_id': libraryId}, args, offset, limit)
+    for element in listing:
+        element.set('librarySectionID', libraryId)
+    return listing
+
+
+def collectionElement(collection, memberType):
+    """A Silo collection as the <Directory type="collection"> plexlibrary.Collection is built from; its key is its
+    titles' path (SiloServer's route), which Collection.all() lists."""
+    attrs = {
+        'type': 'collection',
+        'ratingKey': collection['id'],
+        'key': f'/library/collections/{collection["id"]}/children',
+        'title': collection.get('title') or '',
+        'childCount': str(collection.get('item_count') or 0),
+    }
+    for name, value in (
+        ('thumb', collection.get('poster_url')),
+        ('art', collection.get('backdrop_url')),
+        ('summary', collection.get('description')),
+        ('subtype', memberType),
+    ):
+        if value:
+            attrs[name] = value
+    return ElementTree.Element('Directory', attrs)
+
+
+def collectionsTab(client, libraryId, args, offset=None, limit=None, memberType=''):
+    """
+    A library's Collections tab from GET /api/v2/library/{id}/collections: its collections in Silo's order, then any
+    in its groups (personal ones, shared from other profiles) not listed yet, each once. Uno has no groups.
+    """
+    answer = client.request('GET', f'/api/v2/library/{libraryId}/collections') or {}
+    collections = list(answer.get('collections') or [])
+    for group in answer.get('groups') or []:
+        collections += group.get('collections') or []
+    seen, elements = set(), []
+    for collection in collections:
+        if collection.get('id') and collection['id'] not in seen:
+            seen.add(collection['id'])
+            elements.append(collectionElement(collection, memberType))
+    start, size = window(args, offset, limit)
+    page = [] if size == 0 else elements[start : None if size is None else start + size]
+    return container(page, totalSize=len(elements), offset=start)
+
+
+def collectionItems(client, collectionId, args, offset=None, limit=None):
+    """A collection's titles (plexlibrary.Collection.all()) from the catalog's library_collection source."""
+    return catalogListing(client, {'source': 'library_collection', 'collection_id': collectionId}, args, offset, limit)
 
 
 def jumpBar(client, libraryId, args):
@@ -95,6 +156,8 @@ def jumpBar(client, libraryId, args):
     the sizes to place each entry, so a run's size is the distance to the next one and every letter starts where
     Silo says. A letter in two blocks keeps both, the second with its own key.
     """
+    if args.get('type') == COLLECTION_TYPE:
+        return container()  # Silo's letters count a library's titles, not its collections: no bar on that tab
     order = 'desc' if (args.get('sort') or '').split(',')[0].endswith(':desc') else 'asc'
     answer = client.request('POST', '/api/v2/catalog/letters', json={'library_id': libraryId, 'order': order}) or {}
     runs = answer.get('runs') or []

@@ -18,6 +18,8 @@ from .items import container
 SECTION_TYPES = {'movies': 'movie', 'series': 'show'}
 # a library's grid (plexlibrary.LibrarySection.all()) and its sort menu: /library/sections/<library id>/all|sorts
 LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter)$')
+# a collection's titles (plexlibrary.Collection.all(): its key)
+COLLECTION_PATH = re.compile(r'^/library/collections/([^/]+)/children$')
 
 
 class SiloConnection:
@@ -44,6 +46,7 @@ class SiloServer:
         self._unmapped = set()
         self._routes = {'/library/sections': self._sections}
         self._homeCapabilities = None
+        self._libraryTypes = {}  # library id -> Plex section type, from the library list (a collection's subtype)
 
     def __repr__(self):
         return f'<SiloServer {self.name}>'
@@ -67,6 +70,17 @@ class SiloServer:
                 library.libraryItems,
                 self.client,
                 libraryPath.group(1),
+                dict(parse_qsl(queryString)),
+                kwargs.get('offset'),
+                kwargs.get('limit'),
+                self._libraryTypes.get(libraryPath.group(1), ''),
+            )
+        collectionPath = COLLECTION_PATH.match(route) if handler is None else None
+        if collectionPath:
+            handler = functools.partial(
+                library.collectionItems,
+                self.client,
+                collectionPath.group(1),
                 dict(parse_qsl(queryString)),
                 kwargs.get('offset'),
                 kwargs.get('limit'),
@@ -103,6 +117,7 @@ class SiloServer:
             kind = SECTION_TYPES.get(entry.get('type'))
             if kind is None:
                 continue
+            self._libraryTypes[entry['id']] = kind
             sections.append(
                 ElementTree.Element(
                     'Directory',

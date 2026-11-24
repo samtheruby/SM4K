@@ -290,3 +290,80 @@ class SiloLibraryRowsTest(KodiTestCase):
 
     def test_no_rows_when_silo_cant_answer(self):
         self.assertEqual(server(FakeSession(problem(503, 'dependency_unavailable'))).hubs('2', count=20), [])
+
+
+def curated(cid, title, count):
+    return {
+        'id': cid,
+        'title': title,
+        'item_count': count,
+        'poster_url': f'/api/v2/artwork/collections/{cid}.webp',
+        'backdrop_url': '',
+        'description': f'About {title}',
+        'library_id': '2',
+        'group_id': None,
+    }
+
+
+COLLECTIONS = FakeResponse(
+    200,
+    {
+        'library_id': '2',
+        'collections': [curated('c1', 'Alien', 4), curated('c2', 'Bond', 25)],
+        'groups': [
+            {
+                'id': 'g1',
+                'kind': 'user_collections',
+                'name': 'Shared',
+                'collections': [curated('c2', 'Bond', 25), curated('u1', 'Sam picks', 7)],
+            }
+        ],
+    },
+)
+
+
+class SiloCollectionsTest(KodiTestCase):
+    """A library's Collections tab (the grid's type=18 listing) from GET /api/v2/library/{id}/collections, and a
+    collection's titles (Collection.all(): its key) from the catalog's library_collection source."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+
+    def test_the_tab_lists_the_librarys_collections_then_personal_ones(self):
+        session = FakeSession(LIBRARIES, COLLECTIONS)
+
+        items = section(session).all(0, 50, type_=18)
+
+        self.assertEqual(
+            [(i.type, i.title, i.childCount.asInt()) for i in items],
+            [('collection', 'Alien', 4), ('collection', 'Bond', 25), ('collection', 'Sam picks', 7)],
+        )
+        self.assertEqual(session.calls[1]['url'], 'http://silo.lan:8090/api/v2/library/2/collections')
+        self.assertEqual(items[0].memberType(), 'movie')
+
+    def test_the_tabs_count(self):
+        listing = section(FakeSession(LIBRARIES, COLLECTIONS)).all(0, 0, type_=18)
+
+        self.assertEqual(listing.totalSize.asInt(), 3)
+
+    def test_a_collection_lists_its_titles(self):
+        session = FakeSession(LIBRARIES, COLLECTIONS, page([movie(n) for n in range(4)], 4))
+        alien = section(session).all(0, 50, type_=18)[0]
+
+        titles = alien.all(0, 50)
+
+        self.assertEqual([t.title for t in titles], ['Film 0', 'Film 1', 'Film 2', 'Film 3'])
+        params = session.calls[2]['params']
+        self.assertEqual(
+            (params['source'], params['collection_id'], params['seek'], params['limit']),
+            ('library_collection', 'c1', 0, 50),
+        )
+
+    def test_no_letters_on_the_collections_tab(self):
+        session = FakeSession(LIBRARIES)
+
+        bar = section(session).jumpList(sort=('titleSort', 'asc'), type_=18)
+
+        self.assertFalse(bar)
+        self.assertEqual(len(session.calls), 1)
