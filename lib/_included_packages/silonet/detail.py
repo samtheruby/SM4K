@@ -2,12 +2,15 @@
 An item's detail, GET /api/v2/catalog/items/{id}, as the full Plex element plexnet's reload() reads
 (/library/metadata/<ratingKey>): the tile's attributes (silonet.items) plus what the pre-play, show and episode screens
 show - summary, tagline, content rating, studio, genres, countries, cast and crew, ratings (as <Rating> with the
-image keys Uno has icons for), and each version as Media > Part > Stream. Stream ids and language codes for choosing
-tracks are Phase 5's.
+image keys Uno has icons for), and each version as Media > Part > Stream. An episode's season comes from
+/catalog/series/{id}/seasons/{num} (its detail names only the number), and a show's on-deck episode, when asked
+(includeOnDeck), from its play_content_id. Stream ids for choosing tracks are Phase 5's.
 """
 
 from xml.etree import ElementTree
 
+from .client import log
+from .errors import SiloError
 from .items import container, itemElement, ms
 
 # Silo's resolution to Plex's videoResolution, what Uno's resolution badges read
@@ -186,6 +189,40 @@ def mediaElement(version):
     return media
 
 
+def fileMediaElement(file):
+    """A version as a season's episode list has it (Silo's files: no tracks) as <Media><Part/></Media>, what the
+    episode list's resolution badges read."""
+    fileId = file.get('file_id')
+    media = element(
+        'Media',
+        {
+            'id': fileId,
+            'videoResolution': RESOLUTIONS.get(str(file.get('resolution') or '').lower(), 'sd'),
+            'videoCodec': file.get('codec_video'),
+            'audioChannels': file.get('audio_channels'),
+            'container': file.get('container'),
+        },
+    )
+    media.append(element('Part', {'id': fileId, 'key': f'/library/parts/{fileId}/file', 'size': file.get('file_size')}))
+    return media
+
+
+def setSeason(root, season):
+    """An episode's season (a Silo season, as /catalog/series/{id}/seasons lists it) as its Plex parent."""
+    seasonId = season.get('content_id')
+    if not seasonId:
+        return
+    for name, value in (
+        ('parentRatingKey', seasonId),
+        ('parentKey', '/library/metadata/' + seasonId),
+        ('parentTitle', season.get('title')),
+        ('parentThumb', season.get('poster_url')),
+        ('parentIndex', season.get('season_number')),
+    ):
+        if value is not None and value != '':
+            root.set(name, str(value))
+
+
 def detailElement(detail):
     """The item's full element: its tile's attributes and everything above. None for media Uno has no screens for."""
     root = itemElement(detail)
@@ -193,11 +230,14 @@ def detailElement(detail):
         return None
     studios = detail.get('studios') or []
     versions = detail.get('versions') or []
+    # a show's studio is its network, as Plex has it
+    companies = detail.get('networks') or studios
     for name, value in (
         ('summary', detail.get('overview')),
         ('tagline', detail.get('tagline')),
         ('contentRating', detail.get('content_rating')),
-        ('studio', studios[0] if studios else None),
+        ('studio', companies[0] if companies else None),
+        ('childCount', detail.get('season_count')),
         ('duration', ms(versions[0]['duration']) if versions and versions[0].get('duration') else None),
     ):
         if value:
@@ -211,8 +251,27 @@ def detailElement(detail):
     return root
 
 
-def itemDetail(client, contentId):
-    """/library/metadata/<id>: the item's detail in a container, as plexnet's reload() reads data[0]."""
+def itemDetail(client, contentId, params=None):
+    """/library/metadata/<id>: the item's detail in a container, as plexnet's reload() reads data[0]. An episode's
+    season and a show's on-deck episode are extra requests; when Silo can't answer one, the item opens without it."""
     answer = client.request('GET', f'/api/v2/catalog/items/{contentId}') or {}
     root = detailElement(answer)
-    return container([root] if root is not None else [])
+    if root is None:
+        return container()
+    if answer.get('type') == 'episode' and answer.get('series_id') and answer.get('season_number') is not None:
+        try:
+            season = client.request(
+                'GET', f'/api/v2/catalog/series/{answer["series_id"]}/seasons/{answer["season_number"]}'
+            )
+            setSeason(root, season or {})
+        except SiloError as e:
+            log(f'season of {contentId} failed: {e.status} {e.type}')
+    if answer.get('type') == 'series' and (params or {}).get('includeOnDeck') and answer.get('play_content_id'):
+        try:
+            episode = itemElement(client.request('GET', f'/api/v2/catalog/items/{answer["play_content_id"]}') or {})
+        except SiloError as e:
+            log(f'on deck of {contentId} failed: {e.status} {e.type}')
+            episode = None
+        if episode is not None:
+            ElementTree.SubElement(root, 'OnDeck').append(episode)
+    return container([root])

@@ -33,31 +33,41 @@ def itemElement(item):
     if kind not in ('movie', 'episode', 'series', 'season') or not contentId:
         return None
     state = item.get('user_state') or {}
+    # a detail's, a season's or an episode's watch state (WatchRollup); a grid's is in user_state
+    progress = item.get('user_data') or {}
     attrs = {'ratingKey': contentId, 'key': '/library/metadata/' + contentId, 'title': item.get('title') or ''}
     setIf(attrs, 'year', item.get('year'))
     setIf(attrs, 'thumb', item.get('poster_url'))
     setIf(attrs, 'art', item.get('backdrop_url'))
-    setIf(attrs, 'originallyAvailableAt', item.get('release_date'))
+    setIf(
+        attrs, 'originallyAvailableAt', item.get('release_date') or item.get('first_air_date') or item.get('air_date')
+    )
 
     if kind in ('movie', 'episode'):
         attrs['type'] = kind
         duration = item.get('duration_seconds') or (item.get('runtime') or 0) * 60
         if duration:
             attrs['duration'] = ms(duration)
-        if item.get('position_seconds'):
-            attrs['viewOffset'] = ms(item['position_seconds'])
-        if state.get('played'):
+        position = item.get('position_seconds') or progress.get('position_seconds')
+        if position:
+            attrs['viewOffset'] = ms(position)
+        if state.get('played') or progress.get('played'):
             attrs['viewCount'] = '1'
         if kind == 'episode':
             setIf(attrs, 'grandparentTitle', item.get('series_title'))
             setIf(attrs, 'grandparentThumb', item.get('series_poster_url'))
             setIf(attrs, 'grandparentRatingKey', item.get('series_id'))
+            if item.get('series_id'):
+                attrs['grandparentKey'] = '/library/metadata/' + item['series_id']
             setIf(attrs, 'parentIndex', item.get('season_number'))
             setIf(attrs, 'index', item.get('episode_number'))
         return ElementTree.Element('Video', attrs)
 
-    watched = state.get('watched_count') or 0
-    attrs['leafCount'] = str(watched + (state.get('unplayed_count') or 0))
+    # a show's and a season's children: its seasons, its episodes (silonet.shows)
+    attrs['key'] += '/children'
+    counts = progress or state
+    watched = counts.get('watched_count') or 0
+    attrs['leafCount'] = str(watched + (counts.get('unplayed_count') or 0))
     attrs['viewedLeafCount'] = str(watched)
     if kind == 'series':
         attrs['type'] = 'show'
@@ -67,6 +77,8 @@ def itemElement(item):
         setIf(attrs, 'parentTitle', item.get('series_title'))
         setIf(attrs, 'parentThumb', item.get('series_poster_url'))
         setIf(attrs, 'parentRatingKey', item.get('series_id'))
+        if item.get('series_id'):
+            attrs['parentKey'] = '/library/metadata/' + item['series_id']
         setIf(attrs, 'index', item.get('season_number'))
     return ElementTree.Element('Directory', attrs)
 
