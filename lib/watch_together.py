@@ -11,6 +11,7 @@ The host starts a party from an item's pre-play screen (hostItem()); a guest joi
 menu (joinParty()) and plays whatever the room plays, until the room ends or they leave.
 """
 
+import math
 import threading
 import time
 
@@ -24,6 +25,13 @@ IN_STEP = 1.0  # seconds from the room within which a command doesn't seek
 # how far from a seek's destination Silo accepts readiness: a guest's within a second, the host's within fifteen (Kodi
 # lands a seek on a keyframe, and Silo re-anchors the room where the host really is: docs/realtime-api.md)
 READY_BAND, HOST_READY_BAND = 1.0, 15.0
+# Kodi can't play faster or slower, and lands a seek on a keyframe: a party gets to the room by holding still (ahead
+# of a playing room) or playing up to it (behind a paused one), and otherwise seeks ahead of a playing room by what
+# the last seek fell short (Silo's in-place seek for players that don't correct by rate: watch-party-synchronization)
+MAX_HOLD = 15.0  # seconds at most held still or played up to the room
+SEEK_LEAD, MAX_LEAD = 2.0, 12.0  # seconds a seek aims ahead of a playing room, at first and at most
+SETTLE = 1.0  # seconds a seek takes to land
+STEPS = 5  # adjustments at most for one command
 REPORT_EVERY, READY_EVERY = 1.5, 0.5  # seconds
 
 # the party this add-on is in, if any (one at a time)
@@ -41,7 +49,11 @@ class Party:
         self.snapshot = dict(snapshot)
         self.player, self.link, self.later = player, link, later
         self.clock = time.time
+        self.sleep = time.sleep
         self.lastCommand, self.lastTarget = None, None
+        self._lead = SEEK_LEAD
+        self._token = 0  # the latest command's: an older command's convergence stops
+        self._converging = False
         self.ended = None
         self.changed = threading.Event()
         self._echoUntil = 0.0
@@ -72,6 +84,11 @@ class Party:
 
     def _selfReady(self):
         return any(m.get('is_ready') for m in self.snapshot.get('members') or [] if m.get('is_self'))
+
+    def _position(self):
+        """Where the player is, as Silo takes a position: finite, and not below zero."""
+        position = self.player.position()
+        return round(max(0.0, position), 3) if math.isfinite(position) else 0.0
 
     def _roomItemPlaying(self):
         return self.selected is not None and self.player.playingKey() == self.selected
@@ -106,28 +123,86 @@ class Party:
         if not self._roomItemPlaying():
             self.lastCommand, self.lastTarget = command, None
             return
-        playing = command.get('playback_state') == 'playing'
-        target = float(command.get('position_seconds') or 0)
-        if playing and self.link is not None:
-            from silonet.room import epoch
+        from silonet.room import epoch
 
-            executeAt = epoch(command.get('execute_at'))
-            if executeAt is not None:
-                target += max(0.0, self.link.serverTime() - executeAt)
-        self._echoUntil = self.clock() + ECHO
-        if command.get('action') == 'seek' or abs(self.player.position() - target) > IN_STEP:
-            self.player.seek(target)
-        if self.player.isPaused() == playing:
-            self.player.setPaused(not playing)
-        self.lastCommand, self.lastTarget = command, target
-        util.LOG('Watch party: ran {0} at {1:.1f}', command.get('action'), target)
+        playing = command.get('playback_state') == 'playing'
+        base = float(command.get('position_seconds') or 0)
+        executeAt = epoch(command.get('execute_at'))
+
+        def roomPosition():
+            if not playing or executeAt is None or self.link is None:
+                return base
+            return base + max(0.0, self.link.serverTime() - executeAt)
+
+        self._token += 1
+        token = self._token
+        self.lastCommand, self.lastTarget = command, roomPosition()
+        if command.get('action') == 'seek' and not playing:
+            self.lastTarget = base
+        self._converge(roomPosition, playing, command.get('action') == 'seek', token)
+        util.LOG('Watch party: ran {0} at {1:.1f}', command.get('action'), self.player.position())
+
+    def _converge(self, roomPosition, playing, seek, token):
+        """Get to where the room is, then play or pause as it does; stops when a newer command arrives."""
+        self._converging = True
+        try:
+            if seek and abs(self.player.position() - roomPosition()) > IN_STEP:
+                self._seekTo(roomPosition(), playing)
+            for _ in range(STEPS):
+                if token != self._token:
+                    return
+                drift = self.player.position() - roomPosition()
+                if abs(drift) <= IN_STEP:
+                    break
+                if playing and 0 < drift <= MAX_HOLD:
+                    # ahead of a playing room: hold still while it catches up
+                    self.player.setPaused(True)
+                    self._wait(drift, token)
+                    self.player.setPaused(False)
+                elif not playing and -MAX_HOLD <= drift < 0:
+                    # behind a paused room: play up to it
+                    self._playUpTo(roomPosition(), token)
+                else:
+                    self._seekTo(roomPosition(), playing)
+            if token == self._token and self.player.isPaused() == playing:
+                self.player.setPaused(not playing)
+        finally:
+            if token == self._token:
+                self._converging = False
+                self._echoUntil = self.clock() + ECHO
+
+    def _seekTo(self, target, playing):
+        """A seek, ahead of a playing room by what the last one fell short; the next one learns from this one."""
+        aim = target + (self._lead if playing else 0.0)
+        self.player.seek(aim)
+        self.sleep(SETTLE)
+        if playing:
+            short = (target + SETTLE) - self.player.position()
+            if short > IN_STEP:
+                self._lead = min(MAX_LEAD, self._lead + short)
+
+    def _playUpTo(self, target, token):
+        self.player.setPaused(False)
+        waited, limit = 0.0, (target - self.player.position()) + 3.0
+        while self.player.position() < target - 0.1 and waited < limit and token == self._token:
+            self.sleep(0.1)
+            waited += 0.1
+        self.player.setPaused(True)
+
+    def _wait(self, seconds, token):
+        """Sleep, in tenths, until seconds have passed or a newer command arrives."""
+        waited = 0.0
+        while waited < seconds and token == self._token:
+            step = min(0.1, seconds - waited)
+            self.sleep(step)
+            waited += step
 
     # reports
     def tick(self):
         """One report: the playback session attached first, then where the player is. Nothing while the room's
         item isn't playing here."""
-        if self.link is None or not self._roomItemPlaying():
-            return
+        if self.link is None or not self._roomItemPlaying() or self._converging:
+            return  # not while it holds still or plays up to the room: those pauses aren't the user's
         session = self.player.sessionId(self.selected)
         if not session:
             return
@@ -137,7 +212,7 @@ class Party:
                 self._attaching = session
             self.link.send({'type': 'attach_session', 'session_id': session})
             return
-        position = round(self.player.position(), 3)
+        position = self._position()
         report = {
             'type': 'state_report',
             'session_id': session,
@@ -176,12 +251,12 @@ class Party:
 
     # the player's own events
     def _echo(self):
-        return self.clock() < self._echoUntil
+        return self._converging or self.clock() < self._echoUntil
 
     def onLocalPause(self, paused):
         if self._echo() or not self._roomItemPlaying() or self.link is None:
             return
-        position = round(self.player.position(), 3)
+        position = self._position()
         if self.snapshot.get('self_can_control_transport'):
             self.link.send(
                 {
