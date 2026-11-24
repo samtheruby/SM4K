@@ -326,10 +326,11 @@ def itemDetail(client, contentIds, params=None):
     the item opens without it."""
     ids = contentIds.split(',')
     seasons = {}  # (series id, season number) -> the season, asked for once for the episodes of one season
+    prefs = {}  # series id -> its remembered audio and subtitle choice (silonet.trackprefs), asked for once
     elements = []
     for contentId in ids:
         try:
-            root = oneDetail(client, contentId, params, seasons)
+            root = oneDetail(client, contentId, params, seasons, prefs)
         except SiloError as e:
             if len(ids) == 1:
                 raise
@@ -340,7 +341,7 @@ def itemDetail(client, contentIds, params=None):
     return container(elements)
 
 
-def oneDetail(client, contentId, params, seasons):
+def oneDetail(client, contentId, params, seasons, prefs):
     answer = client.request('GET', f'/api/v2/catalog/items/{contentId}') or {}
     root = detailElement(answer)
     if root is None:
@@ -353,6 +354,11 @@ def oneDetail(client, contentId, params, seasons):
             setSeason(root, seasons[place])
         except SiloError as e:
             log(f'season of {contentId} failed: {e.status} {e.type}')
+        from . import trackprefs  # imports this module
+
+        if answer['series_id'] not in prefs:
+            prefs[answer['series_id']] = trackprefs.load(client, answer['series_id'])
+        trackprefs.apply(root, *prefs[answer['series_id']])
     if answer.get('type') == 'series' and (params or {}).get('includeOnDeck') and answer.get('play_content_id'):
         try:
             episode = itemElement(client.request('GET', f'/api/v2/catalog/items/{answer["play_content_id"]}') or {})

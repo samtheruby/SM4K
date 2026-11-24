@@ -247,10 +247,11 @@ class PlexPlayer(BasePlayer):
         bitrates = self.item.settings.getGlobal("transcodeVideoBitrates")
         cap = int(bitrates[quality]) if 0 <= quality < len(bitrates) else 0
         try:
+            # no subtitle index: Kodi renders the file's own subtitles, and Silo's subtitle index is another
+            # numbering (playback protocol v3, section 8)
             attempt = server.startPlayback(self.item, part, position / 1000.0,
                                            audio.index.asInt() if audio else None,
-                                           subtitle.index.asInt() if subtitle and not subtitle.index.asInt() < 0
-                                           else None,
+                                           None,
                                            bandwidthCap=cap or None,
                                            hdr=not self.item.settings.getPreference("disable_hdr", False))
         except PlaybackRefused as e:

@@ -92,6 +92,8 @@ class SiloPlayTest(KodiTestCase):
         original = body['client_playback_context']['deliveries']['original_http']
         self.assertTrue(original['enabled'] and original['supported_on_device'])
         self.assertEqual(body['audio_track_index'], 0)
+        # Kodi renders the file's own subtitles; Silo's subtitle index is another numbering (protocol section 8)
+        self.assertNotIn('subtitle_track_index', body)
 
         meta = player.metadata
         self.assertEqual(meta.streamUrls, ['http://silo.lan:8090/api/v2/stream/S1?st=t'])

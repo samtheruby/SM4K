@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 from plexnet.signalsmixin import SignalsMixin
 
-from . import detail, home, library, people, playback, related, shows
+from . import detail, home, library, people, playback, related, shows, trackprefs
 from .client import log
 from .errors import SiloError
 from .items import container
@@ -221,6 +221,13 @@ class SiloServer(SignalsMixin):
             return None
         url = (grant or {}).get('url') or ''
         return self.client.baseUrl + url if url.startswith('/') else url or None
+
+    def rememberStream(self, video, streamType, stream, streams):
+        """A track chosen for an episode, kept for its show (silonet.trackprefs; plexnet's
+        PlexPart.setSelectedStream()). stream None is subtitles off; a movie's choice isn't kept."""
+        seriesId = video is not None and video.TYPE == 'episode' and str(video.get('grandparentRatingKey') or '')
+        if seriesId:
+            trackprefs.remember(self.client, seriesId, streamType, stream, streams)
 
     def findVideoSession(self, sessionId, ratingKey):
         from plexnet import exceptions
