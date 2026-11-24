@@ -455,7 +455,7 @@ class Settings(object):
     SETTINGS = {
         'main': (
             T(32000, 'Main'), (
-                BoolSetting('kiosk.mode', T(32043, 'Start Plex On Kodi Startup'), False),
+                BoolSetting('kiosk.mode', T(32043, 'Start SM4K On Kodi Startup'), False),
                 OptionsSetting(
                     'kiosk.delay', T(33651, 'Start Delay'),
                     0,
@@ -497,10 +497,10 @@ class Settings(object):
                 BoolSetting(
                     'theme_music_loop', T(33737, 'Loop theme music'), False
                 ),
-                BoolSetting('player_stop_on_exit', T(35085, 'Stop playback when exiting Plex'), True)
+                BoolSetting('player_stop_on_exit', T(35085, 'Stop playback when exiting SM4K'), True)
                 .description(T(35086, "Stop whatever is playing, and clear Kodi's playlists, whenever the addon "
                                       "exits - including signing out or switching users. Off: playback carries on "
-                                      "under Kodi's own player after Plex has closed.")),
+                                      "under Kodi's own player after SM4K has closed.")),
             )
         ),
         'video': (
@@ -600,11 +600,11 @@ class Settings(object):
                     )
                 ).description(T(33695, "Where do you want to download subtitles from? Applies to Download "
                                        "subtitles in the player, from the Subtitles button or the player's Settings. "
-                                       "Before playback it always uses Plex.")),
+                                       "Before playback it always uses Silo.")),
                 BoolSetting('subtitle_download_fallback', T(33701, 'Fallback to Kodi'),
                             True).description(
-                    T(33702, "When no subtitles are found via the Plex subtitle search, fall back to Kodi "
-                             "subtitle search. Only in the player: before playback, subtitles always come from Plex.")
+                    T(33702, "When no subtitles are found via the Silo subtitle search, fall back to Kodi "
+                             "subtitle search. Only in the player: before playback, subtitles always come from Silo.")
                 ),
                 OptionsSetting(
                     'burn_subtitles',
@@ -643,9 +643,9 @@ class Settings(object):
                 BoolSetting(
                     'plextuary_offer', T(35102, 'Offer Plextuary on startup'), True
                 ).description(
-                    T(35103, "When Plex starts under a different skin, or with a Plextuary font set other than "
+                    T(35103, "When SM4K starts under a different skin, or with a Plextuary font set other than "
                              "Inter UI, offer to switch, installing Plextuary if needed; and remind you when "
-                             "Plextuary is too old. Plex's screens are designed around Plextuary's Inter UI "
+                             "Plextuary is too old. SM4K's screens are designed around Plextuary's Inter UI "
                              "fonts.")
                 ),
                 OptionsSetting(
@@ -654,8 +654,8 @@ class Settings(object):
                         skin_check.variantName(skin_check.detectedVariant())))] + list(skin_check.VARIANTS),
                     show_cb=lambda: util.getSetting('plextuary_offer', True)
                 ).description(
-                    T(35101, "Which Plextuary skin to offer when Plex starts. Automatic picks the one built for this "
-                             "device; choose another to override it. Takes effect the next time Plex starts.")
+                    T(35101, "Which Plextuary skin to offer when SM4K starts. Automatic picks the one built for this "
+                             "device; choose another to override it. Takes effect the next time SM4K starts.")
                 ),
                 OptionsSetting(
                     'watched_indicators', T(33022, ''),
@@ -683,7 +683,7 @@ class Settings(object):
                 BoolUserSetting(
                     'use_watchlist', T(34007, 'Use Watchlist'), True
                 ).description(
-                    T(34008, "Activates the current user's Plex watchlist as a section item. Adds watchlist "
+                    T(34008, "Activates the current user's Silo watchlist as a section item. Adds watchlist "
                              "functionality to certain media screens. Per-user setting. Default: On")
                 ),
                 BoolUserSetting(
@@ -757,7 +757,7 @@ class Settings(object):
                     'disable_exit_on_back', T(35007, 'Home: Disable exit on Back'), False
                 ).description(
                     T(35008, "When enabled, pressing Back on the Home screen no longer shows the "
-                             "exit prompt and will not exit Plex. You can still exit from the Exit "
+                             "exit prompt and will not exit SM4K. You can still exit from the Exit "
                              "option in your username menu.")
                 ),
                 BoolSetting(
@@ -845,7 +845,7 @@ class Settings(object):
                     'virtual_chapters', T(33603, 'Use virtual chapters'), True
                 ).description(
                     T(33604, 'When the above is enabled and no video chapters are available, simulate them by using the'
-                             ' markers identified by the Plex Server (Intro, Credits).')
+                             ' markers identified by the Silo Server (Intro, Credits).')
                 ),
                 BoolUserSetting(
                     'combined_chapters', T(35001, 'Combine video & virtual chapters'), True
