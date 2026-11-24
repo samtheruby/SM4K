@@ -37,6 +37,10 @@ class FakeSession:
     def __init__(self, *responses):
         self.responses = list(responses)
         self.calls = []
+        self.closed = False
+
+    def close(self):
+        self.closed = True
 
     def queue(self, *responses):
         self.responses.extend(responses)

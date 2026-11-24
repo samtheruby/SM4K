@@ -111,6 +111,10 @@ class SiloServer:
     def updateReachability(self, force=True, allowFallback=False):
         pass  # no connection to test: a request that fails says so itself
 
+    def close(self):
+        """The add-on is ending (plexapp.App.preShutdown()): its connections to the server close."""
+        self.client.session.close()
+
     def dropIdleConnections(self):
         pass  # requests' session opens new connections itself after a sleep
 

@@ -138,3 +138,19 @@ class SiloServerManagerTest(KodiTestCase):
         self.assertIs(manager.getServer('srv-1'), srv)
         self.assertEqual(manager.serversByUuid, {'srv-1': srv})
         self.assertTrue(manager.serversKnown())
+
+
+class SiloShutdownTest(KodiTestCase):
+    def test_add_on_exit_closes_its_connections(self):
+        """main.py's shutdown runs plexapp.App.preShutdown(), which closes every server. On the user's Kodi box a
+        SiloServer without close() stopped the shutdown there, and Kodi killed the add-on after 5 s."""
+        from plexnet import http, plexapp
+
+        session = FakeSession()
+        with (
+            mock.patch.object(plexapp, 'SERVERMANAGER', SiloServerManager([server(session)])),
+            mock.patch.object(http.HttpRequest, '_cancel', False),
+        ):
+            plexapp.App().preShutdown()
+
+        self.assertTrue(session.closed)
