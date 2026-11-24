@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 from plexnet.signalsmixin import SignalsMixin
 
-from . import detail, home, library, people, playback, related, shows, trackprefs, trickplay, watch, watchstate
+from . import detail, home, library, people, playback, related, search, shows, trackprefs, trickplay, watch, watchstate
 from .client import log
 from .errors import SiloError
 from .items import container
@@ -387,15 +387,15 @@ class SiloServer(SignalsMixin):
         pass  # requests' session opens new connections itself after a sleep
 
     def hubs(self, section=None, count=None, search_query=None, section_ids=None, continue_watching_count=None):
-        """Home's rows from Silo's home layout (silonet.home), or a library's (section: its id) from Silo's rows for it
-        (silonet.library), in Silo's order. Search isn't mapped yet: none. Silo's home rows aren't per library, so
-        section_ids doesn't narrow them (D8)."""
-        if search_query:
-            return []
+        """Home's rows from Silo's home layout (silonet.home), a library's (section: its id) from Silo's rows for it
+        (silonet.library), in Silo's order, or a search's (search_query: silonet.search). Silo's home rows aren't per
+        library, so section_ids doesn't narrow them (D8)."""
         from plexnet import plexlibrary, plexobjects, video  # noqa: F401 (video registers the item types)
 
         try:
-            if section:
+            if search_query:
+                rows = search.searchHubs(self.client, search_query, count)
+            elif section:
                 rows = library.libraryRows(self.client, section, count)
             else:
                 rows = home.homeRows(self.client, count, continue_watching_count, self.homeCapabilities())

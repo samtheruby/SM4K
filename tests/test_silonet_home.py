@@ -256,12 +256,6 @@ class SiloHomeRowsTest(KodiTestCase):
 
         self.assertEqual([h.more.asBool() for h in hubs], [False, True, False])
 
-    def test_search_is_not_mapped_yet(self):
-        session = FakeSession()
-
-        self.assertEqual(server(session).hubs(None, search_query='dune'), [])
-        self.assertEqual(session.calls, [])
-
 
 class SiloSeeMoreTest(KodiTestCase):
     """A row's "See more" grid (see_more.HubGridWindow): server.query(hub.key, limit=0) for how many, then
