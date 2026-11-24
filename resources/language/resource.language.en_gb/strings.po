@@ -4357,3 +4357,11 @@ msgstr ""
 msgctxt "#35309"
 msgid "Sign in with your password"
 msgstr ""
+
+msgctxt "#35311"
+msgid "Switch server"
+msgstr ""
+
+msgctxt "#35312"
+msgid "Add server"
+msgstr ""

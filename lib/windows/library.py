@@ -1664,6 +1664,8 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
                 options.append(('switch', T(32342, 'Switch User')))
             else:
                 options.append(('refresh_users', T(32980, 'Refresh Users')))
+            if getattr(plexapp.SERVERMANAGER.selectedServer, 'platform', None) == 'silo':
+                options.append(('server', T(35311, 'Switch server')))
         options.append(('settings', T(32343, 'Settings')))
         # a watch party on a Silo server (decision D26): join one by its code, or end the one this profile hosts
         server = plexapp.SERVERMANAGER.selectedServer
@@ -1786,6 +1788,13 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
         elif option == 'refresh_users':
             plexapp.ACCOUNT.updateHomeUsers(refreshSubscription=True)
             return True
+        elif option == 'server':
+            from lib import silo
+            previous = silo.pickServer(silo.deviceIdentity())
+            if previous:
+                # start-up again on the server picked (lib/main.py), back on this one if its sign-in is given up
+                self._closeSessionWithOption({'switch_server': previous})
+            return
         elif option == 'signout':
             button = optionsdialog.show(
                 T(32344, 'Sign Out'),

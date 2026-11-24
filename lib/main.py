@@ -306,8 +306,11 @@ def _main():
     util.setGlobalProperty('is_active', '1')
 
     try:
+        previousServer = None  # the Silo server the user menu's Switch server left (silo.initAfterSwitch())
         while not util.MONITOR.abortRequested():
-            if silo.init():
+            ready = silo.initAfterSwitch(previousServer) if previousServer else silo.init()
+            previousServer = None
+            if ready:
                 background.setSplash(False)
                 fromSwitch = False
                 while not util.MONITOR.abortRequested():
@@ -397,6 +400,10 @@ def _main():
                             util.DEBUG_LOG('Main: Switching users...: {}', plexapp.ACCOUNT.ID)
                             plexapp.ACCOUNT.isAuthenticated = False
                             fromSwitch = True
+                        elif isinstance(closeOption, dict) and closeOption.get('switch_server'):
+                            # another Silo server picked: start-up again, on it
+                            previousServer = closeOption['switch_server']
+                            break
                         elif isinstance(closeOption, dict):
                             if closeOption.get('fast_switch'):
                                 uid = closeOption['fast_switch']
