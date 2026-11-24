@@ -82,15 +82,16 @@ class SiloClient:
         self._coolUntil = {}  # (method, path) -> monotonic time: Silo rate-limits per budget, not per client
         self.onProfileLocked = None  # called on 403 profile_verification_required: the profile's PIN session ended
 
-    def request(self, method, path, params=None, json=None, profile=True):
-        """The decoded JSON answer, or None for an empty one. Raises a silonet.errors type for every failure."""
-        response = self._send(method, path, params, json, profile)
+    def request(self, method, path, params=None, json=None, profile=True, headers=None):
+        """The decoded JSON answer, or None for an empty one. Raises a silonet.errors type for every failure. headers:
+        more request headers (a watch-together room's X-Room-Token)."""
+        response = self._send(method, path, params, json, profile, extra=headers)
         if response.status_code == 401:
             name, detail = problemOf(response)
             if not self.credentials.refreshToken:
                 raise SiloAuthError(401, name, detail)
             self._refresh()
-            response = self._send(method, path, params, json, profile)
+            response = self._send(method, path, params, json, profile, extra=headers)
             if response.status_code == 401:
                 raise SiloAuthError(401, *problemOf(response))
         return self._result(response, method, path)
@@ -115,7 +116,7 @@ class SiloClient:
                 headers['X-Profile-Token'] = self.credentials.profileToken
         return headers
 
-    def _send(self, method, path, params, json, profile, authorize=True):
+    def _send(self, method, path, params, json, profile, authorize=True, extra=None):
         remaining = self._coolUntil.get((method, path), 0) - time.monotonic()
         if remaining > 0:
             raise SiloRateLimited(429, 'rate_limit_exceeded', 'cooling down', int(remaining + 0.999))
@@ -127,7 +128,7 @@ class SiloClient:
                 self.baseUrl + path,
                 params=params,
                 json=json,
-                headers=self._headers(profile, authorize),
+                headers=dict(self._headers(profile, authorize), **(extra or {})),
                 timeout=self.timeout,
             )
         except requests.RequestException as e:
