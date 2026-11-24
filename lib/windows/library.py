@@ -1712,6 +1712,23 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
         # as it arrives there (processCommand()).
         self.navigate(navintent.closeSession(option))
 
+    def fastSwitchUser(self):
+        """The user button's context press: straight back to the previous profile (the previous_user setting), through
+        the profile picker for one with a PIN. One gone from the server since (removed there, and Refresh Users has the
+        list without it) is forgotten and the user menu opens instead: Switch User, with no profile to pick, only
+        reopened Home, on every press."""
+        uid = util.getSetting('previous_user')
+        if uid == plexapp.ACCOUNT.ID:
+            return
+        user = plexapp.ACCOUNT.getHomeUser(uid)
+        if not user:
+            util.setSetting('previous_user', '')
+            self.showUserMenu()
+        elif user.isProtected:
+            self.doUserOption("switch")
+        else:
+            self.doUserOption({"fast_switch": user.id})
+
     def doUserOption(self, option):
         """Ported from HomeWindow.doUserOption() (home.py) - see quiet-orbiting-heron.md's Cold
         Start plan, Stage 3. Adaptations: dialog_props reads carriedProps defensively (getattr,
@@ -3185,15 +3202,7 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
                     self.showUserMenu()
                     return True
                 elif action == xbmcgui.ACTION_CONTEXT_MENU and util.getSetting('previous_user'):
-                    # fast-switch to the previous user, if not protected
-                    uid = util.getSetting('previous_user')
-                    if uid == plexapp.ACCOUNT.ID:
-                        return True
-                    user = plexapp.ACCOUNT.getHomeUser(uid)
-                    if not user or user.isProtected:
-                        self.doUserOption("switch")
-                        return True
-                    self.doUserOption({"fast_switch": user.id})
+                    self.fastSwitchUser()
                     return True
 
             # The showing view's own controls, when it's one of this window's own views
