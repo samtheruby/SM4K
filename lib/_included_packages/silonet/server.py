@@ -24,6 +24,8 @@ LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter
 METADATA_PATH = re.compile(r'^/library/metadata/([^/]+)$')
 # a show's seasons or a season's episodes (their key), and a show's every episode (Show.episodes())
 CHILDREN_PATH = re.compile(r'^/library/metadata/([^/]+)/(children|allLeaves)$')
+# an episode tile's season, by number (silonet.items)
+SEASON_PATH = re.compile(r'^/library/metadata/([^/]+)/season/(\d+)$')
 # a title's Related row (RelatedMixin.getRelated())
 SIMILAR_PATH = re.compile(r'^/library/metadata/([^/]+)/similar$')
 # a person, and their titles in the libraries (Role.getDetails(), lib/windows/person.py libraryFilmography())
@@ -116,6 +118,9 @@ class SiloServer(SignalsMixin):
             handler = functools.partial(
                 shows.allLeaves, self.client, childrenPath.group(1), kwargs.get('offset'), kwargs.get('limit')
             )
+        seasonPath = SEASON_PATH.match(route) if handler is None else None
+        if seasonPath:
+            handler = functools.partial(shows.seasonByNumber, self.client, seasonPath.group(1), seasonPath.group(2))
         similarPath = SIMILAR_PATH.match(route) if handler is None else None
         if similarPath:
             count = (kwargs.get('params') or {}).get('count') or dict(parse_qsl(queryString)).get('count')

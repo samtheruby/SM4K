@@ -370,3 +370,32 @@ class SiloEpisodesAtOnceTest(KodiTestCase):
         data = self.batch(session, ['episode-tvdb-1-1-9', 'episode-tvdb-1-1-2'])
 
         self.assertEqual([d.get('ratingKey') for d in data], ['episode-tvdb-1-1-2'])
+
+
+class SiloEpisodeTileTest(KodiTestCase):
+    """An episode on a Home row names its season by number only (Silo's home items): its season comes from
+    /catalog/series/{id}/seasons/{num}, so the episodes screen opened from the tile has a season (on the Kodi box,
+    2026-11-24, it raised on a None season)."""
+
+    def setUp(self):
+        super().setUp()
+        ensure_plex_interface()
+
+    def test_an_episode_from_home_finds_its_season(self):
+        homeItem = {
+            'content_id': 'episode-tvdb-1-1-2',
+            'type': 'episode',
+            'title': 'Undertow',
+            'series_id': 'series-tvdb-1',
+            'series_title': 'Harbor Lights',
+            'season_number': 1,
+            'episode_number': 2,
+        }
+        session = FakeSession(ok(SEASON_ROW_1))
+
+        season = tile(server(session), homeItem).season()
+
+        self.assertEqual(session.calls[0]['url'], BASE + '/catalog/series/series-tvdb-1/seasons/1')
+        self.assertEqual(
+            (season.ratingKey, season.index.asInt(), season.parentRatingKey), ('season-tvdb-1-1', 1, 'series-tvdb-1')
+        )
