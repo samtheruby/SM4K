@@ -95,6 +95,8 @@ class SiloServer(SignalsMixin):
         self.playback = playback.Playback(client, getattr(client.device, 'clientVersion', ''))
         self._subtitleResults = {}  # a subtitle search result's key -> the result, for its download
         self._previews = {}  # file id -> its item's id, for a played file with seek-bar previews
+        # item id -> the file a watch party plays of it (D26): every member plays the room's file, and only it
+        self.pinnedFiles = {}
 
     def __repr__(self):
         return f'<SiloServer {self.name}>'
@@ -252,9 +254,26 @@ class SiloServer(SignalsMixin):
     ):
         """Starts a Silo attempt for the item's version (part: its Media's Part, whose id is Silo's file id) and
         returns it (silonet.playback.Attempt); PlaybackRefused when Silo decides it can't play."""
+        key = str(item.ratingKey)
+        pinned = self.pinnedFiles.get(key)
         return self.playback.start(
-            str(item.ratingKey), part.id, seconds, audioIndex, subtitleIndex, quality, bandwidthCap, hdr
+            key, pinned or part.id, seconds, audioIndex, subtitleIndex, quality, bandwidthCap, hdr, pinned=bool(pinned)
         )
+
+    def fileId(self, video):
+        """Silo's id of the file video plays (its chosen version's, else its first)."""
+        part = _part(video)
+        return part.id if part is not None else None
+
+    def getObject(self, key, assume_container=False):
+        """The item at a Plex path (/library/metadata/<id>), as PlexServer.getObject() builds it."""
+        from plexnet import plexobjects, video  # noqa: F401 (video registers the item types)
+
+        data = self.query(key)
+        container = (
+            self if assume_container else plexobjects.PlexContainer(data, initpath=key, server=self, address=key)
+        )
+        return plexobjects.buildItem(self, data[0], key, container=container)
 
     def watchInfo(self, item, fileId):
         """The played file's skip markers and chapters (silonet.watch), as plexnet Marker and Chapter lists; empty

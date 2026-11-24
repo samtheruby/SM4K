@@ -86,6 +86,13 @@ class SiloServerTest(KodiTestCase):
         self.assertEqual(len(list(first)), 0)
         self.assertEqual(sum('/hubs/sections/home' in msg for msg, _ in ENV.log_lines), 1)
 
+    def test_an_item_by_its_key(self):
+        session = FakeSession(FakeResponse(200, {'content_id': 'movie-1', 'type': 'movie', 'title': 'Dune'}))
+
+        item = server(session).getObject('/library/metadata/movie-1')
+
+        self.assertEqual((item.TYPE, item.title), ('movie', 'Dune'))
+
     def test_identity_and_urls(self):
         srv = server(FakeSession())
 

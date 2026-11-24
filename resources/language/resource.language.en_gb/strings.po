@@ -4160,3 +4160,63 @@ msgstr ""
 msgctxt "#35259"
 msgid "Favorites"
 msgstr ""
+
+msgctxt "#35260"
+msgid "Watch together"
+msgstr ""
+
+msgctxt "#35261"
+msgid "Join watch party"
+msgstr ""
+
+msgctxt "#35262"
+msgid "Party code"
+msgstr ""
+
+msgctxt "#35263"
+msgid "Party code: {0}[CR]Others join from Silo or SM4K with this code."
+msgstr ""
+
+msgctxt "#35264"
+msgid "Waiting for the host to start something..."
+msgstr ""
+
+msgctxt "#35265"
+msgid "The watch party has ended"
+msgstr ""
+
+msgctxt "#35266"
+msgid "This profile joined the watch party on another device"
+msgstr ""
+
+msgctxt "#35267"
+msgid "Only the host controls playback"
+msgstr ""
+
+msgctxt "#35268"
+msgid "In a watch party, the host picks what plays"
+msgstr ""
+
+msgctxt "#35269"
+msgid "End watch party"
+msgstr ""
+
+msgctxt "#35270"
+msgid "Couldn't start the watch party"
+msgstr ""
+
+msgctxt "#35271"
+msgid "Watch party"
+msgstr ""
+
+msgctxt "#35272"
+msgid "No watch party has that code"
+msgstr ""
+
+msgctxt "#35273"
+msgid "Leave the watch party?"
+msgstr ""
+
+msgctxt "#35274"
+msgid "End the watch party for everyone?"
+msgstr ""

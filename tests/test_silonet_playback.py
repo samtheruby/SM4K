@@ -71,6 +71,18 @@ class SiloPlayTest(KodiTestCase):
         self.session, self.server = session, srv
         return player
 
+    def test_a_watch_party_plays_the_rooms_file(self):
+        # D26: every member plays the room's file, and Silo keeps to it (allow_alternate_versions false)
+        session = FakeSession(ok(MOVIE), ok(CAPABILITIES), ok(decision(), 201), NO_WATCH)
+        srv = server(session)
+        movie = tile(srv, MOVIE).reload()
+        srv.pinnedFiles[str(movie.ratingKey)] = 777
+
+        plexplayer.PlexPlayer(movie, 0).build()
+
+        body = session.calls[2]['json']
+        self.assertEqual((body['file_id'], body['allow_alternate_versions']), ('777', False))
+
     def test_a_movie_plays_its_original(self):
         player = self.built(ok(decision(), 201))
 

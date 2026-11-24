@@ -286,8 +286,10 @@ class Playback:
         quality='auto',
         bandwidthCap=None,
         hdr=True,
+        pinned=False,
     ):
-        """Starts an attempt for the item (key: its ratingKey) and returns it; PlaybackRefused for a terminal."""
+        """Starts an attempt for the item (key: its ratingKey) and returns it; PlaybackRefused for a terminal. pinned:
+        a watch party's file, which Silo keeps to (allow_alternate_versions false), as every member plays it."""
         previous = self.attempts.pop(key, None)
         if previous is not None:
             previous.stop()
@@ -304,6 +306,8 @@ class Playback:
                 bandwidthCap,
                 hdr,
             )
+            if pinned:
+                body['allow_alternate_versions'] = False
             try:
                 decision = self.client.request('POST', '/api/v2/playback/start', json=body) or {}
                 break
