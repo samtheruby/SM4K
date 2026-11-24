@@ -1807,7 +1807,7 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             return True
         elif option == 'server':
             from lib import silo
-            previous = silo.pickServer(silo.deviceIdentity())
+            previous = silo.pickServer(silo.deviceIdentity(), dialog_props=getattr(self, 'carriedProps', None))
             if previous:
                 # start-up again on the server picked (lib/main.py), back on this one if its sign-in is given up
                 self._closeSessionWithOption({'switch_server': previous})
