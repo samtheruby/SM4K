@@ -6,6 +6,8 @@ seek here becomes the room's request, or is undone for a guest the host hasn't g
 stops its item. The player and the room socket are stand-ins.
 """
 
+from unittest import mock
+
 from kodienv import ENV
 
 ENV.abort_requested = True
@@ -473,6 +475,123 @@ class PartyScreenTest(KodiTestCase):
 
         self.assertEqual(p.link.sent, [])
         self.assertEqual(p.player.calls, [('seek', 100.0)])
+
+
+VOTE_LOBBY = dict(LOBBY, selection_mode='vote', selected_content_id=None)
+SUGGESTIONS = [
+    {'id': 's1', 'title': 'Heat', 'subtitle': '', 'vote_count': 1, 'created_at': '2026-11-24T10:00:00.000Z'},
+    {'id': 's2', 'title': 'Dune', 'subtitle': '', 'vote_count': 2, 'created_at': '2026-11-24T10:01:00.000Z'},
+]
+
+
+class VotingRoom(FakeRoom):
+    def setVoting(self, client, voting):
+        self.calls.append(('voting', voting))
+        self.snapshot = dict(self.party.snapshot, selection_mode='vote' if voting else 'host_pick', generation=11)
+
+    def suggestions(self, client):
+        return [dict(s, voted_by_me=s['id'] == 's1') for s in SUGGESTIONS]
+
+    def vote(self, client, suggestionId, on):
+        self.calls.append(('vote', suggestionId, on))
+
+    def promote(self, client, suggestionId):
+        self.calls.append(('promote', suggestionId))
+        self.snapshot = dict(self.party.snapshot, phase='playing', selected_content_id='movie-dune', generation=12)
+
+    def suggest(self, client, contentId, contentType, title, subtitle=''):
+        self.calls.append(('suggest', contentId, contentType, title, subtitle))
+
+
+def voting(role, snapshot=VOTE_LOBBY):
+    session = FakeSession(snapshot, role)
+    session.room = VotingRoom(session.party)
+    session.party.suggestionSource = lambda: session.room.suggestions(None)
+    session.party.loadSuggestions()
+    return session
+
+
+class PartyVotingTest(KodiTestCase):
+    """A voting room: members suggest things and vote; the host plays a suggestion for everyone."""
+
+    def test_suggestions_by_votes_with_my_own_ticked(self):
+        rows = watch_together.partyRows(voting('guest').party)
+
+        suggested = [r for r in rows if isinstance(r[0], str) and r[0].startswith('suggestion:')]
+        self.assertEqual(
+            [(r[0], r[1], r[2]) for r in suggested],
+            [('suggestion:s2', ('Dune', '2 votes'), False), ('suggestion:s1', ('Heat', '1 vote'), True)],
+        )
+        self.assertNotIn('ready', keys(rows))
+
+    def test_a_guest_votes(self):
+        session = voting('guest')
+
+        self.assertTrue(watch_together.choose(session, 'suggestion:s2'))
+        self.assertTrue(watch_together.choose(session, 'suggestion:s1'))
+
+        self.assertEqual(session.room.calls, [('vote', 's2', True), ('vote', 's1', False)])
+        self.assertEqual(session.party.myVotes, {'s2'})
+
+    def test_the_host_plays_a_suggestion(self):
+        session = voting('host')
+
+        stays = watch_together.choose(session, 'suggestion:s1')
+
+        self.assertFalse(stays)
+        self.assertEqual(session.room.calls, [('promote', 's1')])
+        self.assertIsNotNone(session.party.selection())
+
+    def test_the_host_switches_voting_on(self):
+        session = FakeSession(LOBBY, 'host')
+        session.room = VotingRoom(session.party)
+        session.party.suggestionSource = lambda: session.room.suggestions(None)
+
+        self.assertIn('voting', keys(watch_together.partyRows(session.party)))
+        watch_together.choose(session, 'voting')
+
+        self.assertEqual(session.room.calls, [('voting', True)])
+        self.assertEqual([s['id'] for s in session.party.suggestions], ['s1', 's2'])
+        self.assertNotIn('start', keys(watch_together.partyRows(session.party)))
+
+    def test_suggestions_update_keeps_my_votes(self):
+        session = voting('guest')
+
+        session.party.onMessage(
+            {'type': 'suggestions_update', 'suggestions': [dict(s, voted_by_me=False) for s in SUGGESTIONS]}
+        )
+
+        self.assertEqual(session.party.myVotes, {'s1'})
+        self.assertEqual(len(session.party.suggestions), 2)
+
+    def test_watch_together_in_a_voting_party_suggests_it(self):
+        session = voting('guest')
+        episode = mock.Mock(
+            type='episode', ratingKey='episode-1', title='Pilot', grandparentTitle='Show', parentIndex='1', index='2'
+        )
+
+        with (
+            mock.patch.object(watch_together, 'current', return_value=session),
+            mock.patch.object(watch_together, 'runParty') as run,
+        ):
+            watch_together.pickItem(episode, None, lambda video, seconds: None)
+
+        self.assertEqual(session.room.calls, [('suggest', 'episode-1', 'episode', 'Pilot', 'Show · S1E2')])
+        run.assert_called_once()
+
+    def test_watch_together_as_a_guest_of_a_host_picked_party_opens_its_screen(self):
+        session = FakeSession(GUEST_LOBBY, 'guest')
+        movie = mock.Mock(type='movie', ratingKey='movie-1', title='Heat')
+
+        with (
+            mock.patch.object(watch_together, 'current', return_value=session),
+            mock.patch.object(watch_together, 'runParty') as run,
+            mock.patch.object(watch_together, '_begin') as begin,
+        ):
+            watch_together.pickItem(movie, None, lambda video, seconds: None)
+
+        begin.assert_not_called()  # stays in this party, no room of its own
+        run.assert_called_once()
 
 
 class PartyLoopTest(KodiTestCase):

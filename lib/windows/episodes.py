@@ -2229,7 +2229,7 @@ class EpisodesWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutil
             self._goToShow()
         elif key == 'watch_together':
             episode = mli.dataSource
-            watch_together.hostItem(episode, episode.getServer().fileId(episode), watch_together.playerFor(self))
+            watch_together.pickItem(episode, episode.getServer().fileId(episode), watch_together.playerFor(self))
         elif key == 'delete':
             # rebuilt only once deleted (not on a No), and season card and all (_rebuildEpisodeList()),
             # on the episode _delete() left selected in its place

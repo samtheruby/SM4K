@@ -757,7 +757,7 @@ class PrePlayWindow(kodigui.ControlledWindow, windowutils.UtilMixin, windowutils
     def watchTogether(self):
         """Put this up next in a watch party this profile hosts (decision D26), on the party's screen: members mark
         themselves ready, and the host starts it for everyone."""
-        watch_together.hostItem(self.video, self.video.server.fileId(self.video), watch_together.playerFor(self))
+        watch_together.pickItem(self.video, self.video.server.fileId(self.video), watch_together.playerFor(self))
 
     def openItem(self, control=None, item=None, inherit_from_watchlist=True, server=None, is_watchlisted=False, **kw):
         if not item:
