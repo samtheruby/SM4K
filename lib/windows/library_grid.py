@@ -688,6 +688,11 @@ class GridMixin(object):
             args['unwatched'] = '1'
 
         pq = playqueue.createPlayQueueForItem(self.section, options={'shuffle': shuffle}, args=args)
+        if not pq:
+            # a queue SiloMod builds itself is none when nothing in the grid is left to play (all watched)
+            self.playBtnClicked = False
+            util.messageDialog(T(33020, 'Play'), T(35310, 'Nothing to play.'))
+            return
         # back on the grid when it ends: the tiles played updated then (LibraryWindow.onReInit())
         self._watchGridPlayback()
         opener.open(pq, auto_play=True, auto_play_open=True)
