@@ -105,6 +105,12 @@ class Setting(object):
         return '<Setting {0}={1}>'.format(self.ID, self.get())
 
 
+def plexOnly():
+    """show_cb for a setting only a Plex server reads (its transcoder, subtitle auto-sync, cinema trailers and pre-rolls,
+    its request cache): it keeps its default, which code still reads, but Silo has nothing for it to change."""
+    return False
+
+
 class BasicSetting(Setting):
     def __init__(self, ID, label, default, desc='', theme_relevant=False, backport_from=None, show_cb=None):
         self.ID = ID
@@ -611,16 +617,17 @@ class Settings(object):
                     T(32031, 'Burn-in Subtitles'),
                     'auto',
                     (('auto', T(32030, 'Auto')), ('image', T(32029, 'Only Image Formats')),
-                     ('always', T(32028, 'Always')))
+                     ('always', T(32028, 'Always'))),
+                    show_cb=plexOnly
                 ),
                 BoolSetting('burn_ssa', T(32944, 'Burn-in SSA subtitles'),
-                            True).description(
+                            True, show_cb=plexOnly).description(
                     T(32945, 'When Direct Streaming instruct the Plex Server to burn in SSA/ASS subtitles (thus '
                              'transcoding the video stream). If disabled it will not touch the video stream, but '
                              'will convert the subtitle to unstyled text.')
                 ),
                 BoolUserSetting('auto_sync', T(33655, 'Auto-Sync Subtitles'),
-                            True).description(
+                            True, show_cb=plexOnly).description(
                     T(33656, 'Only for External SRT subtitles. The PMS setting for voice activity detection '
                              'has to be enabled for this to work.')
                 ),
@@ -783,16 +790,19 @@ class Settings(object):
             T(32940, 'Player UI'), (
                 BoolSetting('player_official', T(33045, 'Behave like official Plex clients'), True).description(
                     T(33046, '')),
-                BoolUserSetting('preplay_preroll', T(34051, 'Movies: Play pre-rolls'), False).description(
+                BoolUserSetting('preplay_preroll', T(34051, 'Movies: Play pre-rolls'), False,
+                                show_cb=plexOnly).description(
                     T(34052, 'Plays pre-roll clips (server-defined) before playing a movie without a resume '
                              'point. User-specific.')),
-                BoolUserSetting('preplay_preroll_first', T(34054, 'Play pre-rolls before trailers'), True).description(
+                BoolUserSetting('preplay_preroll_first', T(34054, 'Play pre-rolls before trailers'), True,
+                                show_cb=plexOnly).description(
                     T(34055, 'Official Plex clients play the trailers first, then the preroll clips. Enabling '
                              'this will do the opposite. Default: On. User-specific.')),
                 UAListSetting(
                     'preplay_trailers', T(34053, 'Cinema Trailers to Play Before Movies'),
                     5,
-                    list(map(str, list(range(6))))
+                    list(map(str, list(range(6)))),
+                    show_cb=plexOnly
                 ),
                 BoolSetting('no_osd_time_spoilers', T(33004, ''), False, backport_from="no_spoilers").description(
                     T(33005, '')),
@@ -1046,14 +1056,15 @@ class Settings(object):
                     [
                         ('items', T(33723, 'Media Items')),
                         ('libraries', T(33722, 'Libraries')),
-                    ]
+                    ],
+                    show_cb=plexOnly
                 ).description(T(33727, "Store Plex server responses for items and library views in a local "
                                        "SQLite database. Doesn't cache anything else (Home/Hubs are always up to date)."
                                        " Massively speeds up consecutive visits to items and libraries. Certain "
                                        "important events, such as watch state changes, automatically delete the item "
                                        "cache and its corresponding library cache. The complete cache gets cleared "
                                        "when exiting the addon. (Default: Off)")),
-                BoolSetting('persist_requests_cache', T(33725, 'Persist cached Plex data'), False)
+                BoolSetting('persist_requests_cache', T(33725, 'Persist cached Plex data'), False, show_cb=plexOnly)
                 .description(T(33726, "Instead of clearing the cache when exiting the addon, persist it "
                                       "instead. Warning: You'll most likely encounter missing items in libraries "
                                       "or outdated data. Use the corresponding menu functionalities to clear the "
