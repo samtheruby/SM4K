@@ -156,3 +156,26 @@ class SiloSubtitleSearchTest(KodiTestCase):
         self.assertEqual((replan['url'], replan['json']['operation']), (BASE + '/playback/S1/replan', 'track_change'))
         self.assertTrue(stream.isSelected())
         self.assertEqual(stream.getSubtitleServerPath(), HOST + DOWNLOADED['url'])
+
+
+class SubtitleStreamIdsTest(KodiTestCase):
+    def test_subtitle_files_without_an_index_keep_apart(self):
+        # Silo's index is optional on a track (VersionSubtitleTrack): files beside the video may have none
+        from silonet import detail
+
+        version = {
+            'file_id': '241',
+            'subtitle_tracks': [
+                {'index': 2, 'language': 'de', 'external': False},
+                {'language': 'en', 'external': True},
+                {'language': 'fr', 'external': True},
+            ],
+        }
+
+        streams = [s for s in detail.mediaElement(version).iter('Stream') if s.get('streamType') == '3']
+
+        self.assertEqual(len({s.get('id') for s in streams}), 3)
+        self.assertEqual(
+            [s.get('key') for s in streams],
+            [None, '/silo/subtitles/241/external/0', '/silo/subtitles/241/external/1'],
+        )
