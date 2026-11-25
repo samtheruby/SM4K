@@ -170,7 +170,10 @@ class LibrarySection(plexobjects.PlexObject):
         lists for it (a Silo server's libraryLocations(), whose sections list none)."""
         if self._locations is None:
             fetch = getattr(self.server, 'libraryLocations', None)
-            self._locations = self._withSeparator(fetch(self.key)) if fetch else []
+            found = fetch(self.key) if fetch else []
+            if found is None:
+                return []  # the server couldn't say now: asked again next time
+            self._locations = self._withSeparator(found)
         return self._locations
 
     @property
