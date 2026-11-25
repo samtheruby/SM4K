@@ -89,7 +89,7 @@ def subtitleUpdate(stream, ordinal):
             'label': str(stream.title or ''),
             'forced': stream.forced.asBool(),
             'hearing_impaired': stream.get('hearingImpaired').asBool(),
-            'source': 'embedded',
+            'source': 'external' if stream.key else 'embedded',  # a file beside the video has its own key
         },
     }
 

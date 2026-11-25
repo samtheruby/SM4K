@@ -95,6 +95,24 @@ class SheetIndexTest(KodiTestCase):
         )
 
 
+class SheetMemoryTest(KodiTestCase):
+    def test_only_the_last_sheets_stay_decoded(self):
+        # a sheet is about 3200x1440 decoded (10x8 thumbnails of 320): a scrub through a film kept every one
+        from silonet import trickplay
+
+        manifest = dict(TRICKPLAY, thumbnail_count=12)
+        manifest['sheets'] = TRICKPLAY['sheets'] + [{'index': 2, 'url': '/api/v2/trickplay/241/2.jpg?sig=c'}]
+        fetched = []
+        index = trickplay.SheetIndex(manifest, 'http://silo.lan:8090', lambda url: fetched.append(url) or sheet())
+
+        for n in (0, 4, 8, 0):  # sheets 0, 1, 2, then 0 again
+            index.picture(n)
+
+        self.assertEqual(
+            [url.split('/')[-1] for url in fetched], ['0.jpg?sig=a', '1.jpg?sig=b', '2.jpg?sig=c', '0.jpg?sig=a']
+        )
+
+
 class SiloPreviewsTest(KodiTestCase):
     def setUp(self):
         super().setUp()
