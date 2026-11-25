@@ -312,8 +312,13 @@ class Party:
     def _echo(self):
         return self._converging or self.clock() < self._echoUntil
 
+    def _over(self):
+        """Ended (the room closed) or left: the player's events are the user's own again. The session stays the
+        add-on's last (PARTY) after its room ends, and Kodi's callbacks keep coming to it."""
+        return self.ended is not None or self._stop.is_set()
+
     def onLocalPause(self, paused):
-        if self._echo() or not self._roomItemPlaying() or self.link is None:
+        if self._over() or self._echo() or not self._roomItemPlaying() or self.link is None:
             return
         position = self._position()
         if self.snapshot.get('self_can_control_transport'):
@@ -331,7 +336,7 @@ class Party:
         self.player.notify(T(35267, 'Only the host controls playback'))
 
     def onLocalSeek(self, position):
-        if self._echo() or not self._roomItemPlaying() or self.link is None:
+        if self._over() or self._echo() or not self._roomItemPlaying() or self.link is None:
             return
         # a guest the host lets play and pause still can't seek: Silo takes a guest's play and pause only
         if self.isHost and self.snapshot.get('self_can_control_transport'):
@@ -351,6 +356,8 @@ class Party:
 
     def onLocalStart(self):
         """Something started playing: anything but the room's item is stopped for a guest (the host picks)."""
+        if self._over():
+            return
         key = self.player.playingKey()
         if key and key != self.selected and not self.isHost:
             self.player.stop()
@@ -449,6 +456,7 @@ class Session:
         global PARTY
         self.party.stop()
         self.link.stop()
+        self.player.party = None  # Kodi's player events reach no party once it's left
         self.server.pinnedFiles.pop(self.party.selected or '', None)
         if self.party.isHost and self.party.ended is None:
             from silonet.errors import SiloError

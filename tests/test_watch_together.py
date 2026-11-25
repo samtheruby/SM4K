@@ -653,6 +653,39 @@ class PartyEndTest(KodiTestCase):
         self.assertEqual(p.player.calls, [('stop',)])
         self.assertEqual(len(p.player.notes), 1)
 
+    def test_after_the_room_closes_other_items_play(self):
+        # the session stays the add-on's last (PARTY) after the room ends: its player's events go on arriving
+        p = party(player=FakePlayer('movie-tmdb-238'))
+        p.onMessage({'type': 'room_closed', 'reason': 'host_left'})
+        p.player.calls, p.player.key = [], 'movie-other'
+
+        p.onLocalStart()
+
+        self.assertEqual(p.player.calls, [])
+        self.assertEqual(len(p.player.notes), 1)  # only the "has ended" notice
+
+    def test_after_the_room_closes_pauses_and_seeks_are_the_users(self):
+        p = party(player=FakePlayer('movie-tmdb-238'))
+        p.onMessage({'type': 'room_closed', 'reason': 'host_left'})
+        p.player.calls, p.player.key = [], 'movie-tmdb-238'  # played again, on its own
+        p.lastTarget = 30.0
+
+        p.onLocalPause(True)
+        p.onLocalSeek(600.0)
+
+        self.assertEqual((p.player.calls, p.link.sent), ([], []))
+
+    def test_leaving_lets_go_of_the_player(self):
+        session = watch_together.Session.__new__(watch_together.Session)
+        session.server, session.room = mock.Mock(pinnedFiles={}), mock.Mock()
+        session.party = party(player=FakePlayer())
+        session.link = mock.Mock()
+        session.player = mock.Mock(party=session.party)
+
+        session.leave()
+
+        self.assertIsNone(session.player.party)  # Kodi's callbacks reach no party once it's left
+
     def test_the_rooms_selection(self):
         p = party(anchor_position_seconds=61.5)
 
