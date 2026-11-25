@@ -40,6 +40,8 @@ LIBRARY_PATH = re.compile(r'^/library/sections/([^/]+)/(all|sorts|firstCharacter
 METADATA_PATH = re.compile(r'^/library/metadata/([^/]+)$')
 # pre-play's Refresh metadata (an admin's): Silo refreshes the item's metadata itself
 REFRESH_PATH = re.compile(r'^/library/metadata/([^/]+)/refresh$')
+# a library's Scan Library Files (an admin's, the sidebar's library menu): Silo scans the library
+SCAN_PATH = re.compile(r'^/library/sections/([^/]+)/refresh$')
 # a show's seasons or a season's episodes (their key), and a show's every episode (Show.episodes())
 CHILDREN_PATH = re.compile(r'^/library/metadata/([^/]+)/(children|allLeaves)$')
 # an episode tile's season, by number (silonet.items)
@@ -157,6 +159,11 @@ class SiloServer(SignalsMixin):
                 kwargs.get('offset'),
                 kwargs.get('limit'),
                 self._libraryTypes.get(libraryPath.group(1), ''),
+            )
+        scanPath = SCAN_PATH.match(route) if handler is None else None
+        if scanPath:
+            handler = functools.partial(
+                self.client.request, 'POST', '/api/v2/scan', json={'library_id': scanPath.group(1)}
             )
         refreshPath = REFRESH_PATH.match(route) if handler is None else None
         if refreshPath:
