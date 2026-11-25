@@ -102,3 +102,27 @@ class UserSelectSiloTest(KodiTestCase):
         self.assertIsNone(window.selected)
         self.assertEqual(session.calls, [])
         dialog.assert_not_called()
+
+    def test_refresh_while_silo_is_down_keeps_the_profiles(self):
+        session = FakeSession(requests.ConnectionError('refused'))
+        client = SiloClient(
+            'http://silo.lan:8090', DEVICE, Credentials(accessToken='A1', profileId='p1'), session=session
+        )
+        account = SiloAccount(client)
+        account.homeUsers = [SiloProfile({'id': 'p1', 'name': 'Sam'}), self.kids]
+        window = userselect.UserSelectWindow.__new__(userselect.UserSelectWindow)
+        window.userList = mock.Mock()
+        window.userList.getSelectedItem.return_value = FakeItem(userselect.kodigui.EmptyDataSource())  # Refresh
+        window.setProperty = mock.Mock()
+        window.propertyContext = mock.MagicMock()
+        window.start = mock.Mock()
+
+        with (
+            mock.patch.object(plexapp, 'ACCOUNT', account),
+            mock.patch.object(userselect.util, 'showNotification') as notice,
+        ):
+            window.onClick(window.USER_LIST_ID)
+
+        self.assertEqual([user.id for user in account.homeUsers], ['p1', 'p2'])
+        window.start.assert_called_once_with(with_busy=False)  # the list shown again, as it was
+        notice.assert_called_once()

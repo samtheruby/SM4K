@@ -33,6 +33,7 @@ class SiloAccount:
     def __init__(self, client, user=None):
         self.client = client
         client.onProfileLocked = self.requireVerification
+        client.onSessionEnded = self.sessionEnded
         self.user = user if user is not None else {}  # shared: sign-in fills it in later
         self.homeUsers = []
         self.switchUser = False
@@ -112,6 +113,14 @@ class SiloAccount:
         self.switchUser = True
         self.isAuthenticated = True
         return True
+
+    def sessionEnded(self):
+        """
+        Silo refused the session's refresh (signed out on Silo, the password changed, the account disabled): Home hears
+        account:session_ended and closes, and start-up signs in again (lib/main.py, lib/silo.py init()).
+        """
+        if pnUtil.APP:
+            pnUtil.APP.trigger('account:session_ended')
 
     def requireVerification(self):
         """

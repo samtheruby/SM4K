@@ -2286,7 +2286,8 @@ class MultiWindow(object):
                 timing.mark('request+close')
             self.viewClosed(self._current)
 
-        self._current.doClose()
+        if self._current is not None:  # none when closed before the first view was set up
+            self._current.doClose()
         del self._current
         del self._next
 
@@ -2304,7 +2305,8 @@ class MultiWindow(object):
     def doClose(self, **kw):
         plexapp.util.APP.off('close.windows', self.onCloseSignal)
         self._allClosed = True
-        self._current.doClose()
+        if self._current is not None:  # none before the first view is set up (a skin-reload restart at start-up)
+            self._current.doClose()
 
     goHomeAction = XMLBase.goHomeAction
 

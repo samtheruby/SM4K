@@ -94,10 +94,6 @@ def relocate(stored, device, session=None):
     return None
 
 
-def removeServer(serverId):
-    saveServers([s for s in storedServers() if s.serverId != serverId])
-
-
 def useServer(serverId):
     """Make a stored server the one start-up opens: init() opens the one stored last."""
     servers = storedServers()

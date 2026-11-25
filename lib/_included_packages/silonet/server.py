@@ -258,13 +258,13 @@ class SiloServer(SignalsMixin):
 
     def libraryLocations(self, libraryId):
         """A library's folders on the server, for path mapping (plexlibrary.LibrarySection.locations): GET
-        /api/v2/libraries, read once. None when Silo doesn't list them (it may refuse an account that isn't an
-        admin)."""
+        /api/v2/libraries, read once. None when Silo couldn't answer, asked again next time; none when it refuses an
+        account that isn't an admin (403)."""
         if self._libraryPaths is None:
             try:
                 data = self.client.request('GET', '/api/v2/libraries') or {}
-            except SiloError:
-                return []
+            except SiloError as e:
+                return [] if e.status == 403 else None
             self._libraryPaths = {str(entry.get('id')): entry.get('paths') or [] for entry in data.get('items') or []}
         return list(self._libraryPaths.get(str(libraryId), []))
 

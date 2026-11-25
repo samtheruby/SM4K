@@ -17,6 +17,7 @@ from plexnet import exceptions as plexExceptions
 from plexnet import plexapp
 from plexnet import plexobjects
 from plexnet import util as pnUtil
+from silonet.errors import SiloError
 from six.moves import range
 
 from lib import backgroundthread
@@ -1698,6 +1699,11 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
         just closed that nested instance, revealing the library grid underneath instead of
         exiting (live-confirmed regression, fixed here).
         """
+        if option != 'recompile':
+            # Home closing for another session (sign out, another profile or server, an ended session, exit): a
+            # watch party in progress ends for this Kodi, and a room it hosts for everyone. Not when Home only
+            # restarts with its new templates.
+            watch_together.leaveCurrent()
         target = windowutils.HOME
         if shutting_down:
             target._shuttingDown = True
@@ -1804,7 +1810,11 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
                 watch_together.runParty(session, watch_together.playerFor(self))
             return
         elif option == 'refresh_users':
-            plexapp.ACCOUNT.updateHomeUsers(refreshSubscription=True)
+            try:
+                plexapp.ACCOUNT.updateHomeUsers(refreshSubscription=True)
+            except SiloError:
+                # the profiles as they were
+                util.showNotification(T(35252, "Can't reach the Silo server. Check your connection and try again."))
             return True
         elif option == 'server':
             from lib import silo
@@ -1874,6 +1884,7 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             # the acting profile's PIN session ended (SiloAccount.requireVerification(), on a request's thread)
             (plexapp.util.APP, 'account:verification_required',
              self._postedHandler('onProfileLocked', self.onProfileLocked)),
+            (plexapp.util.APP, 'account:session_ended', self._postedHandler('onSessionEnded', self.onSessionEnded)),
         )
         for emitter, signal, handler in self._serverSignalHandlers:
             emitter.on(signal, handler)
@@ -2463,6 +2474,14 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             return
         sidebar_model.refreshWatchlistSection()
         self._rebuildSidebar()
+
+    def onSessionEnded(self, *args, **kwargs):
+        """Silo refused the session (signed out there, the password changed, the account disabled): Home closes, once
+        however many requests heard it, and start-up asks to sign in again (lib/main.py)."""
+        if self._shuttingDown or getattr(self, '_sessionEndedSeen', False):
+            return
+        self._sessionEndedSeen = True
+        self._closeSessionWithOption('session_ended')
 
     def onProfileLocked(self, *args, **kwargs):
         """Silo answered that the acting profile's PIN session ended: Home closes as for Switch User, and main.py's

@@ -48,6 +48,13 @@ class SiloLibraryLocationsTest(KodiTestCase):
         self.assertTrue(session.calls[1]['url'].endswith('/api/v2/libraries'))
         self.assertEqual(len(session.calls), 2)  # asked once
 
+    def test_folders_silo_couldnt_list_are_asked_again(self):
+        session = FakeSession(LIBRARIES, problem(503, 'dependency_unavailable'), LIBRARY_PATHS)
+        movies = plexlibrary.Library(None, server=server(session)).sections()[0]
+
+        self.assertEqual(movies.locations, [])  # Silo restarting when the sidebar was built
+        self.assertEqual(movies.locations, [SERVER_ROOT])
+
     def test_folders_silo_wont_list_are_none(self):
         # GET /api/v2/libraries may be refused to an account that isn't an admin
         movies = plexlibrary.Library(None, server=server(FakeSession(LIBRARIES, problem(403, 'forbidden')))).sections()[

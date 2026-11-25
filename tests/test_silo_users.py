@@ -8,6 +8,8 @@ from unittest import mock
 from kodienv import ENV
 
 ENV.abort_requested = True
+import requests
+
 from lib.windows import library
 
 from .base import KodiTestCase
@@ -73,3 +75,12 @@ class SiloRefreshUsersTest(KodiTestCase):
         self.window.fastSwitchUser()
 
         self.window.doUserOption.assert_called_once_with('switch')
+
+    def test_refresh_users_while_silo_is_down_keeps_the_profiles(self):
+        self.session.responses = [requests.ConnectionError('refused')]  # Silo is down by the time it's asked
+
+        with mock.patch.object(library.util, 'showNotification') as notice:
+            self.window.doUserOption('refresh_users')
+
+        self.assertEqual([user.id for user in self.account.homeUsers], ['p1'])
+        notice.assert_called_once()

@@ -28,7 +28,7 @@ from plexnet import plexapp
 from silonet.errors import SiloUnavailable
 from plexnet.util import cleanToken
 from .templating import render_templates
-from .windows import background, userselect, home, library, windowutils, kodigui, busy
+from .windows import background, userselect, home, library, windowutils, kodigui
 from . import player
 from . import backgroundthread
 from . import skin_check
@@ -400,6 +400,9 @@ def _main():
                             util.DEBUG_LOG('Main: Switching users...: {}', plexapp.ACCOUNT.ID)
                             plexapp.ACCOUNT.isAuthenticated = False
                             fromSwitch = True
+                        elif closeOption == 'session_ended':
+                            # Silo refused the session: start-up again, which signs in (silo.init())
+                            break
                         elif isinstance(closeOption, dict) and closeOption.get('switch_server'):
                             # another Silo server picked: start-up again, on it
                             previousServer = closeOption['switch_server']

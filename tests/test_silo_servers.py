@@ -62,14 +62,6 @@ class StoredServersTest(KodiTestCase):
 
         self.assertEqual(silo.storedServers(), [])
 
-    def test_remove_server(self):
-        silo.addServer('http://silo.lan:8090', DEVICE, session=FakeSession(*silo_answers('s1')))
-        silo.addServer('http://other.lan:8090', DEVICE, session=FakeSession(*silo_answers('s2')))
-
-        silo.removeServer('s1')
-
-        self.assertEqual([s.serverId for s in silo.storedServers()], ['s2'])
-
     def test_unreadable_setting_means_no_servers(self):
         ENV.settings['silo_servers_json'] = 'not json'
 
