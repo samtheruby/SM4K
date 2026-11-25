@@ -24,6 +24,7 @@ OPTIONS = (
     FakeResponse(200, {'server_name': 'Silo', 'login_subtitle': 'Sign in with an existing account.'}),
     FakeResponse(200, {'password_login': True}),
 )
+NO_PASSWORDS = (OPTIONS[0], FakeResponse(200, {'password_login': False}))
 
 
 def pinWindow():
@@ -213,3 +214,40 @@ class SiloSignInTest(KodiTestCase):
         self.assertEqual((window.focused, props.get('password.enabled')), (window.CHANGE_ID, ''))
         self.assertEqual(session.calls, [])  # nothing asked of a server that isn't there
         self.assertTrue(window.closed)
+
+    def test_typing_again_clears_the_last_error(self):
+        window = pinWindow()
+        window.showError('Wrong username or password.')
+        ENV.dialog_answers = deque(['sam'])
+
+        window.onClick(window.USERNAME_ID)
+
+        self.assertEqual(ENV.window_props[13001].get('error'), '')
+
+    def test_signing_in_again_clears_the_last_error(self):
+        window = pinWindow()
+        window.showError('Wrong username or password.')
+
+        window.onClick(window.SIGN_IN_ID)
+
+        self.assertEqual(ENV.window_props[13001].get('error'), '')
+
+    def test_a_server_without_password_sign_in_focuses_change(self):
+        window = pinWindow()
+        window.abort = True
+
+        self.signIn(FakeSession(*NO_PASSWORDS, started(), FakeResponse(200, {'status': 'canceled'})), window)
+
+        # the username field it would start on is hidden: Change is the card's one button then
+        self.assertEqual((window.focused, ENV.window_props[13001].get('password.enabled')), (window.CHANGE_ID, ''))
+
+    def test_too_many_attempts_says_so(self):
+        window = typed(pinWindow(), 'sam', 'pw')
+        session = FakeSession(
+            *OPTIONS, started(), problem(429, 'rate_limit_exceeded', headers={'Retry-After': '30'}), polled('denied')
+        )
+
+        with mock.patch.object(silo.util, 'messageDialog'):
+            self.signIn(session, window)
+
+        self.assertIn('Too many sign-in attempts', ENV.window_props[13001].get('error'))

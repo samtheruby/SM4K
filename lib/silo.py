@@ -11,7 +11,7 @@ from plexnet import util as pnUtil
 from silonet import auth, discovery
 from silonet.account import SiloAccount
 from silonet.client import Credentials, DeviceIdentity, SiloClient
-from silonet.errors import SiloAuthError, SiloError, SiloIncompatible, SiloUnavailable
+from silonet.errors import SiloAuthError, SiloError, SiloIncompatible, SiloRateLimited, SiloUnavailable
 from silonet.server import SiloServer
 from silonet.server_info import LoginOptions, loginOptions, probe
 from silonet.servermanager import SiloServerManager
@@ -185,6 +185,8 @@ def signIn(client, address, reachable=True):
             session.append(auth.passwordLogin(client, window.username, window.password))
         except SiloAuthError:
             window.showError(T(35303, 'Wrong username or password.'))
+        except SiloRateLimited:
+            window.showError(T(35314, 'Too many sign-in attempts. Wait a moment and try again.'))
         except SiloError:
             window.showError(T(35252, "Can't reach the Silo server. Check your connection and try again."))
         else:

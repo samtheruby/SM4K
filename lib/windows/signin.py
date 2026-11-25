@@ -54,6 +54,9 @@ class PinLoginWindow(kodigui.BaseWindow):
         self.setProperty('address', address)
         self.setProperty('username', username)
         self.setProperty('password.enabled', '1' if options.password else '')
+        if not options.password:
+            # the username field the card starts on is hidden: Change is its one button then
+            self.setFocusId(self.CHANGE_ID)
         for name, label in (
             ('username', util.T(35301, 'Username')),
             ('password', util.T(35302, 'Password')),
@@ -81,6 +84,8 @@ class PinLoginWindow(kodigui.BaseWindow):
         self.setProperty('qr', qrImage(code.verificationUriComplete))
 
     def onClick(self, controlID):
+        if controlID in (self.USERNAME_ID, self.PASSWORD_ID, self.SIGN_IN_ID):
+            self.setProperty('error', '')  # the last sign-in's, gone once the user tries again
         if controlID == self.USERNAME_ID:
             self.username = xbmcgui.Dialog().input(util.T(35301, 'Username'), self.username) or self.username
             self.setProperty('username', self.username)
