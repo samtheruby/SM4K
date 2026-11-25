@@ -28,7 +28,7 @@ from plexnet import plexapp
 from silonet.errors import SiloUnavailable
 from plexnet.util import cleanToken
 from .templating import render_templates
-from .windows import background, userselect, home, library, windowutils, kodigui, busy
+from .windows import background, userselect, home, library, windowutils, kodigui
 from . import player
 from . import backgroundthread
 from . import skin_check
