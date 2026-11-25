@@ -3632,9 +3632,8 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             if (plexapp.ACCOUNT.isAdmin and not placeholder
                     and section != home.watchlist_section and not home.isPlaylists(section)
                     and section.server.owned):
-                actions += [('refresh', T(33082, "Scan Library Files")),
-                            ('emptyTrash', T(33083, "Empty Trash")),
-                            ('analyze', T(33084, "Analyze"))]
+                # Silo scans a library (silonet: POST /api/v2/scan); it has no Empty Trash or Analyze
+                actions.append(('refresh', T(33082, "Scan Library Files")))
 
             if ('libraries' in util.getSetting('cache_requests') and section != home.watchlist_section
                     and not placeholder):
@@ -3677,8 +3676,8 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
 
         def onChoice(choice):
             """What opens something of its own opens it over the menu, as the add-on's Settings does, and Back
-            comes back to it: Manage recommended rows and a folder's mapping. Empty Trash's confirm too, whose Yes
-            empties it and closes the menu. The rest close the menu and run below."""
+            comes back to it: Manage recommended rows and Map path's folder selector. The rest close the menu and run
+            below."""
             if choice == 'map_path':
                 # Kodi's folder selector for each folder not mapped yet: the library by its name, a folder of a
                 # library with several by its own
@@ -3702,20 +3701,6 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
                 self.showHubSettingsDialog(section)
                 after['rows'] = after['rows'] or self._hubsSettingsChanged
                 return backToMenu(choice)
-            if choice == 'emptyTrash':
-                button = optionsdialog.show(
-                    T(33083, 'Empty Trash'),
-                    section.title,
-                    optionsdialog.destructive(T(32328, 'Yes')),
-                    T(32329, 'No'),
-                    dialog_props=getattr(self, 'carriedProps', None)
-                )
-                if button != 0:
-                    return backToMenu(choice)
-                # Not reopened: Plex doesn't say when it's done
-                with busy.BusyContext(delay=True, delay_time=0.2):
-                    section.emptyTrash()
-                util.showNotification(T(35208, "Emptying trash: {}").format(section.title))
             return None
 
         options = menuOptions()
@@ -3746,11 +3731,6 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             util.showNotification(T(35207, "Scanning {}").format(section.title))
             self._watchScan(section, before)
             return
-        elif choice == "analyze":
-            with busy.BusyContext(delay=True, delay_time=0.2):
-                section.analyze()
-            return
-
         elif choice == "cache_reset":
             try:
                 plexapp.util.INTERFACE.clearRequestsCache()
@@ -3780,6 +3760,8 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             return None, None
         for d in data if data is not None else ():
             if d.get('key') == str(section.key):
+                if d.get('refreshing') is None:
+                    return None, None  # a server whose library list doesn't say (Silo)
                 return d.get('refreshing') == '1', d.get('scannedAt')
         return None, None
 
@@ -3787,7 +3769,10 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
         """Until section's scan is done - seen scanning and then not, or scannedAt moved on from before's (a scan
         that finds nothing can come and go between two polls) - then its rows refreshed in place if they're
         showing, or Home's, which draw on every library: something new can land in Recently Added and the like.
-        No longer than SCAN_WATCH_SECONDS; on a thread of its own, the refresh on the main thread (postUI())."""
+        No longer than SCAN_WATCH_SECONDS; on a thread of its own, the refresh on the main thread (postUI()). Not
+        watched when the server didn't say before the scan (before: (None, None)): it won't say after either."""
+        if before == (None, None):
+            return
         scannedBefore = before[1]
 
         def run():

@@ -4373,3 +4373,7 @@ msgstr ""
 msgctxt "#35313"
 msgid "Remove path mapping"
 msgstr ""
+
+msgctxt "#35314"
+msgid "Too many sign-in attempts. Wait a moment and try again."
+msgstr ""
