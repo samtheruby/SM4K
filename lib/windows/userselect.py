@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from kodi_six import xbmc
 from kodi_six import xbmcgui
 from plexnet import plexapp
-from silonet.errors import SiloRateLimited, SiloUnavailable
+from silonet.errors import SiloError, SiloRateLimited, SiloUnavailable
 
 from lib import util
 from lib.util import T
@@ -84,9 +84,14 @@ class UserSelectWindow(kodigui.BaseWindow):
             elif not item.dataSource:
                 # refresh user list
                 with self.propertyContext('busy'):
+                    try:
+                        plexapp.ACCOUNT.updateHomeUsers(refreshSubscription=True)
+                    except SiloError:
+                        # the profiles as they were, shown again below
+                        util.showNotification(
+                            T(35252, "Can't reach the Silo server. Check your connection and try again."))
                     self.userList.reset()
                     self.setProperty('initialized', '')
-                    plexapp.ACCOUNT.updateHomeUsers(refreshSubscription=True)
                     self.start(with_busy=False)
             else:
                 self.userSelected(item)

@@ -17,6 +17,7 @@ from plexnet import exceptions as plexExceptions
 from plexnet import plexapp
 from plexnet import plexobjects
 from plexnet import util as pnUtil
+from silonet.errors import SiloError
 from six.moves import range
 
 from lib import backgroundthread
@@ -1804,7 +1805,11 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
                 watch_together.runParty(session, watch_together.playerFor(self))
             return
         elif option == 'refresh_users':
-            plexapp.ACCOUNT.updateHomeUsers(refreshSubscription=True)
+            try:
+                plexapp.ACCOUNT.updateHomeUsers(refreshSubscription=True)
+            except SiloError:
+                # the profiles as they were
+                util.showNotification(T(35252, "Can't reach the Silo server. Check your connection and try again."))
             return True
         elif option == 'server':
             from lib import silo
