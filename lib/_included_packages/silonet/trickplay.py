@@ -8,6 +8,9 @@ LibreELEC; without it there are no previews.
 
 import io
 
+# decoded sheets kept: a sheet is about 3200x1440 (10x8 thumbnails of 320), some 14 MB decoded
+KEPT_SHEETS = 2
+
 
 def available():
     try:
@@ -44,6 +47,8 @@ class SheetIndex:
         perSheet = self.columns * self.rows
         sheetIndex, n = divmod(index, perSheet)
         if sheetIndex not in self._sheets:
+            while len(self._sheets) >= KEPT_SHEETS:
+                self._sheets.pop(next(iter(self._sheets)))  # the one decoded first
             self._sheets[sheetIndex] = Image.open(io.BytesIO(self.fetch(self.urls[sheetIndex])))
             self._sheets[sheetIndex].load()
         column, row = n % self.columns, n // self.columns
