@@ -465,6 +465,13 @@ class Session:
         return self.party.ended is None and self.link.ended is None
 
 
+def leaveCurrent():
+    """Leave the party in progress, if any: Home is closing for another session (LibraryWindow.
+    _closeSessionWithOption()). A host's leaving ends it for everyone."""
+    if PARTY is not None:
+        PARTY.leave()
+
+
 def current(server=None):
     """The party in progress (on server, when given), or None."""
     if PARTY is None or not PARTY.active:

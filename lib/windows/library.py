@@ -1699,6 +1699,11 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
         just closed that nested instance, revealing the library grid underneath instead of
         exiting (live-confirmed regression, fixed here).
         """
+        if option != 'recompile':
+            # Home closing for another session (sign out, another profile or server, an ended session, exit): a
+            # watch party in progress ends for this Kodi, and a room it hosts for everyone. Not when Home only
+            # restarts with its new templates.
+            watch_together.leaveCurrent()
         target = windowutils.HOME
         if shutting_down:
             target._shuttingDown = True
