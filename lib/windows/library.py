@@ -1874,6 +1874,7 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             # the acting profile's PIN session ended (SiloAccount.requireVerification(), on a request's thread)
             (plexapp.util.APP, 'account:verification_required',
              self._postedHandler('onProfileLocked', self.onProfileLocked)),
+            (plexapp.util.APP, 'account:session_ended', self._postedHandler('onSessionEnded', self.onSessionEnded)),
         )
         for emitter, signal, handler in self._serverSignalHandlers:
             emitter.on(signal, handler)
@@ -2463,6 +2464,14 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             return
         sidebar_model.refreshWatchlistSection()
         self._rebuildSidebar()
+
+    def onSessionEnded(self, *args, **kwargs):
+        """Silo refused the session (signed out there, the password changed, the account disabled): Home closes, once
+        however many requests heard it, and start-up asks to sign in again (lib/main.py)."""
+        if self._shuttingDown or getattr(self, '_sessionEndedSeen', False):
+            return
+        self._sessionEndedSeen = True
+        self._closeSessionWithOption('session_ended')
 
     def onProfileLocked(self, *args, **kwargs):
         """Silo answered that the acting profile's PIN session ended: Home closes as for Switch User, and main.py's

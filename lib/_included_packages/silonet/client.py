@@ -81,6 +81,7 @@ class SiloClient:
         self.timeout = timeout
         self._coolUntil = {}  # (method, path) -> monotonic time: Silo rate-limits per budget, not per client
         self.onProfileLocked = None  # called on 403 profile_verification_required: the profile's PIN session ended
+        self.onSessionEnded = None  # called when Silo refuses the session's refresh: signed out there, for one
 
     def request(self, method, path, params=None, json=None, profile=True, headers=None):
         """The decoded JSON answer, or None for an empty one. Raises a silonet.errors type for every failure. headers:
@@ -90,7 +91,14 @@ class SiloClient:
             name, detail = problemOf(response)
             if not self.credentials.refreshToken:
                 raise SiloAuthError(401, name, detail)
-            self._refresh()
+            try:
+                self._refresh()
+            except SiloAuthError:
+                # the session itself refused, not just this token: signed out on Silo, the password changed, the
+                # account disabled
+                if self.onSessionEnded:
+                    self.onSessionEnded()
+                raise
             response = self._send(method, path, params, json, profile, extra=headers)
             if response.status_code == 401:
                 raise SiloAuthError(401, *problemOf(response))

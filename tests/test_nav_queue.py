@@ -305,7 +305,7 @@ class ServerSignalsTest(KodiTestCase):
             for name in ('displayServerAndUser', 'onServerReachable',
                          'onServerSuspect', 'onServerRecovered', 'onServerOffline',
                          'onServerOnline', 'onServerGone', '_onSleep', '_onWake',
-                         '_onUpdateSourceChanged', 'onAccountOnline', 'onProfileLocked'):
+                         '_onUpdateSourceChanged', 'onAccountOnline', 'onProfileLocked', 'onSessionEnded'):
                 setattr(host, name, (lambda n: lambda **kw: calls.append((n, kw)))(name))
             host._postedHandler = library.LibraryWindow._postedHandler.__get__(host)
             library.LibraryWindow.hookSignals(host)
@@ -353,6 +353,12 @@ class ServerSignalsTest(KodiTestCase):
             self.assertEqual('onProfileLocked', host._uiPending[-1][0])
             host.runPendingNav(View())
             self.assertEqual(('onProfileLocked', {}), calls[-1])
+
+            # Silo refused the session (SiloAccount.sessionEnded(), on a request's thread): posted
+            app.trigger('account:session_ended')
+            self.assertEqual('onSessionEnded', host._uiPending[-1][0])
+            host.runPendingNav(View())
+            self.assertEqual(('onSessionEnded', {}), calls[-1])
 
             library.LibraryWindow.unhookSignals(host)
             self.assertEqual([], [h for hs in manager.handlers.values() for h in hs])
