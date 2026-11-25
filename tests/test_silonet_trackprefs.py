@@ -141,3 +141,22 @@ class SiloRememberTracksTest(KodiTestCase):
         movie.selectStream([s for s in movie.media[0].parts[0].streams if s.streamType.asInt() == 2][1], _async=False)
 
         self.assertEqual(len(session.calls), 1)
+
+
+class SubtitleSourceTest(KodiTestCase):
+    def test_a_subtitle_file_is_remembered_as_external(self):
+        from plexnet import plexstream
+        from silonet import detail, trackprefs
+
+        file_ = plexstream.PlexStream(
+            detail.element('Stream', {'streamType': 3, 'id': '241.x0', 'key': '/silo/subtitles/241/external/0'})
+        )
+        own = plexstream.PlexStream(detail.element('Stream', {'streamType': 3, 'id': '241.s2', 'index': 2}))
+
+        self.assertEqual(
+            (
+                trackprefs.subtitleUpdate(file_, 1)['track_signature']['source'],
+                trackprefs.subtitleUpdate(own, 0)['track_signature']['source'],
+            ),
+            ('external', 'embedded'),
+        )
