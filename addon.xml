@@ -24,7 +24,7 @@
 
         <license>GPL-2.0-only</license>
         <website>https://siloserver.org</website>
-        <source>https://github.com/samtheruby/SM4K</source>
+        <source>https://github.com/somepanic/SM4K</source>
         <platform>all</platform>
         <news>
 0.1.0 - the first SiloMod test build

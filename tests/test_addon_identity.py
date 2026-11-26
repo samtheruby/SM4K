@@ -27,7 +27,7 @@ class AddonIdentityTest(KodiTestCase):
     def test_metadata_points_at_sm4k_and_silo(self):
         meta = addonXml().find("extension[@point='xbmc.addon.metadata']")
 
-        self.assertEqual(meta.findtext('source'), 'https://github.com/samtheruby/SM4K')
+        self.assertEqual(meta.findtext('source'), 'https://github.com/somepanic/SM4K')
         self.assertEqual(meta.findtext('website'), 'https://siloserver.org')
         self.assertIn('Silo', meta.findtext("summary[@lang='en_GB']"))
         self.assertNotIn('Plex', meta.findtext("summary[@lang='en_GB']"))
