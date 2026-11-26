@@ -4165,10 +4165,6 @@ msgctxt "#35260"
 msgid "Watch together"
 msgstr ""
 
-msgctxt "#35261"
-msgid "Join watch party"
-msgstr ""
-
 msgctxt "#35262"
 msgid "Party code"
 msgstr ""

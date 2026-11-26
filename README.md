@@ -13,7 +13,7 @@ rough edges.
 - Play the original file whenever your device can, with resume, skip intro and credits, chapters and subtitles.
 - Keep track of what you've watched, Continue Watching, your watchlist and your favorites.
 - Watch together: start a watch party from a film's More menu (Watch together), or join one with its code from your
-  user menu (Join watch party). Everyone stays in step when someone pauses or skips.
+  user menu (Watch together). Everyone stays in step when someone pauses or skips.
 
 ## Where it comes from
 
