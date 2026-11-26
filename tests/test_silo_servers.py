@@ -193,6 +193,23 @@ class SwitchServerMenuTest(KodiTestCase):
 
         self.assertIn(('server', 'Switch server'), dialog.call_args[0][1])
 
+    def test_the_user_menu_order_and_words(self):
+        # Watch together sits between the profile and server items, under the same words in or out of a party
+        def shown():
+            with mock.patch.object(library, 'showOptionsDialog', return_value=None) as dialog:
+                self.window.showUserMenu()
+            return dialog.call_args[0][1]
+
+        menu = ['Refresh Users', 'Watch together', 'Switch server', 'Settings', 'Sign Out', 'Minimize', 'Exit']
+        options = shown()
+        self.assertEqual([label for _key, label in options], menu)
+        self.assertIn(('join_party', 'Watch together'), options)
+
+        with mock.patch.object(library.watch_together, 'current', return_value=mock.Mock()):
+            options = shown()
+        self.assertEqual([label for _key, label in options], menu)
+        self.assertIn(('party', 'Watch together'), options)
+
     def test_another_server_picked_ends_the_session_for_it(self):
         with mock.patch.object(silo, 'pickServer', return_value='srv-2'):
             self.window.doUserOption('server')

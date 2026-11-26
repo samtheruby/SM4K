@@ -1667,15 +1667,11 @@ class LibraryWindow(GridMixin, HubsMixin, PlaybackBtnMixin, kodigui.MultiWindow,
             else:
                 options.append(('refresh_users', T(32980, 'Refresh Users')))
             if getattr(plexapp.SERVERMANAGER.selectedServer, 'platform', None) == 'silo':
+                # a watch party on a Silo server (decision D26): join one by its code, or end the one this profile hosts
+                party = watch_together.current(plexapp.SERVERMANAGER.selectedServer)
+                options.append(('join_party' if party is None else 'party', T(35260, 'Watch together')))
                 options.append(('server', T(35311, 'Switch server')))
         options.append(('settings', T(32343, 'Settings')))
-        # a watch party on a Silo server (decision D26): join one by its code, or end the one this profile hosts
-        server = plexapp.SERVERMANAGER.selectedServer
-        if hasattr(server, 'pinnedFiles'):
-            if watch_together.current(server) is None:
-                options.append(('join_party', T(35261, 'Join watch party')))
-            else:
-                options.append(('party', T(35271, 'Watch party')))
         if plexapp.ACCOUNT.isSignedIn:
             options.append(('signout', T(32344, 'Sign Out')))
         else:
